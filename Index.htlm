@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gafas Inteligentes - Control Técnico</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #video-container {
+            position: relative;
+            flex: 1;
+            background: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            cursor: pointer;
+        }
+
+        .status-bar {
+            background: #000;
+            color: #00ff00;
+            text-align: center;
+            padding: 10px;
+            font-weight: bold;
+            font-size: 14px;
+            letter-spacing: 1px;
+        }
+
+        .controls-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            padding: 15px;
+            background: #111;
+        }
+
+        button {
+            border: none;
+            padding: 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 10px;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        #btnFoto { background-color: #ffcc00; color: #000; }
+        #btnGrabar { background-color: #ff3b30; }
+        #btnVolMas, #btnVolMenos { background-color: #2b78ff; }
+        #btnWhatsApp { 
+            grid-column: span 2; 
+            background-color: #25d366; 
+            padding: 25px;
+        }
+
+        button:active { opacity: 0.7; transform: scale(0.98); }
+    </style>
+</head>
+<body>
+
+    <div class="status-bar" id="estado">ESTADO: ESPERANDO CONEXIÓN GAFAS</div>
+
+    <div id="video-container">
+        <video id="video" autoplay playsinline></video>
+    </div>
+
+    <div class="controls-container" id="controles">
+        <button id="btnFoto" onclick="ejecutarFoto()">📸 FOTO</button>
+        <button id="btnGrabar" onclick="enviarComando('REC')">🎥 GRABAR</button>
+        <button id="btnVolMas" onclick="enviarComando('V+')">VOL +</button>
+        <button id="btnVolMenos" onclick="enviarComando('V-')">VOL -</button>
+        <button id="btnWhatsApp" onclick="transmisionWhatsApp()">📲 TRANSMITIR WHATSAPP</button>
+    </div>
+
+    <script>
+        // CONFIGURACIÓN GAFAS (Basado en tus UUIDs de nRF)
+        const GAFAS_NAME = 'XKOENPRO_282B';
+        const SERVICE_UUID = 0x1801; 
+        const CHARACTERISTIC_UUID = 0x2A06; 
+        let gafaChar;
+
+        // 1. INICIAR VISOR (Cámara del Samsung A34)
+        async function iniciarCamara() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment" } 
+                });
+                document.getElementById('video').srcObject = stream;
+            } catch (err) {
+                document.getElementById('estado').innerText = "ERROR CÁMARA";
+            }
+        }
+
+        // 2. CONECTAR POR BLUETOOTH
+        async function conectarGafas() {
+            try {
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ name: GAFAS_NAME }],
+                    optionalServices: [SERVICE_UUID]
+                });
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(SERVICE_UUID);
+                gafaChar = await service.getCharacteristic(CHARACTERISTIC_UUID);
+                document.getElementById('estado').innerText = "ESTADO: GAFAS VINCULADAS";
+            } catch (err) {
+                console.log(err);
+            }
+        }
+
+        // 3. ENVIAR COMANDOS
+        async function enviarComando(cmd) {
+            if (gafaChar) {
+                const encoder = new TextEncoder();
+                await gafaChar.writeValue(encoder.encode(cmd));
+            }
+        }
+
+        // 4. PANTALLA COMPLETA
+        function toggleFullscreen() {
+            const elem = document.getElementById('video');
+            if (!document.fullscreenElement) {
+                elem.requestFullscreen().catch(err => console.log(err));
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // 5. LÓGICA WHATSAPP
+        function transmisionWhatsApp() {
+            toggleFullscreen();
+            setTimeout(() => {
+                const tel = "573XXXXXXXXX"; // Cambia por tu número
+                window.open(`https://wa.me/${tel}?text=Iniciando%20transmisión`, '_blank');
+            }, 1000);
+        }
+
+        function ejecutarFoto() {
+            enviarComando('SNAP');
+            alert("Comando de foto enviado a las gafas");
+        }
+
+        // INICIO AUTOMÁTICO
+        iniciarCamara();
+        
+        // El Bluetooth requiere un toque humano para activar la búsqueda
+        document.body.addEventListener('click', function() {
+            if(!gafaChar) {
+                conectarGafas();
+            }
+        }, { once: true });
+
+    </script>
+</body>
+</html>
