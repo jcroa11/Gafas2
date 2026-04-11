@@ -2,81 +2,81 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VISOR GAFAS PRO</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>VISOR PRO LENS</title>
     <style>
-        body { background: #000; color: #fff; font-family: sans-serif; text-align: center; margin: 0; padding: 10px; }
-        #visor-box { width: 100%; max-width: 600px; aspect-ratio: 16/9; background: #111; margin: 10px auto; border: 3px solid #00ff00; border-radius: 15px; overflow: hidden; }
+        body { background: #000; color: #fff; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow: hidden; }
+        
+        /* Contenedor del video tipo visor */
+        #visor { 
+            position: relative; width: 100vw; height: 70vh; background: #050505; 
+            border-bottom: 2px solid #00ff00; display: flex; align-items: center; justify-content: center;
+        }
         video { width: 100%; height: 100%; object-fit: cover; }
-        .btn-link { width: 100%; max-width: 600px; padding: 25px; background: #00ff00; color: #000; border: none; border-radius: 15px; font-size: 22px; font-weight: bold; cursor: pointer; margin-bottom: 10px; }
-        #selector { width: 100%; max-width: 600px; padding: 15px; background: #222; color: #fff; border: 1px solid #555; border-radius: 10px; margin-bottom: 15px; display: none; }
-        .grid-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 600px; margin: 0 auto; }
-        .btn { padding: 20px; border: none; border-radius: 10px; font-weight: bold; color: #fff; text-transform: uppercase; }
-        #log { font-size: 12px; color: #0f0; margin-bottom: 5px; }
+
+        /* El botón principal estilo Lens */
+        .btn-lens { 
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            width: 80px; height: 80px; background: rgba(0, 255, 0, 0.2); 
+            border: 4px solid #00ff00; border-radius: 50%; cursor: pointer;
+            box-shadow: 0 0 15px #00ff00; z-index: 10;
+        }
+        .btn-lens:active { background: #00ff00; }
+
+        /* Panel de controles inferiores */
+        .controles { 
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; 
+            padding: 20px; background: #111; height: 30vh;
+        }
+        .boton { 
+            background: #222; border: 1px solid #444; color: #fff; padding: 15px 5px; 
+            border-radius: 10px; font-size: 12px; font-weight: bold; text-transform: uppercase;
+        }
+        #info { position: absolute; top: 10px; left: 10px; font-size: 10px; color: #00ff00; z-index: 5; }
     </style>
 </head>
 <body>
 
-    <div id="log">SISTEMA INICIALIZADO</div>
+    <div id="info">SISTEMA: LISTO | MODO: LENS</div>
 
-    <button class="btn-link" onclick="conectarTodo()">🚀 ACTIVAR GAFAS</button>
-
-    <select id="selector" onchange="cambiarCamara(this.value)"></select>
-
-    <div id="visor-box">
-        <video id="v" autoplay playsinline muted></video>
+    <div id="visor">
+        <video id="camara" autoplay playsinline muted></video>
+        <div class="btn-lens" onclick="iniciarCamara()" title="Activar Cámara"></div>
     </div>
 
-    <div class="grid-btns">
-        <button class="btn" style="background:#ffcc00; color:#000;">📸 FOTO</button>
-        <button class="btn" style="background:#ff4444;">🎥 GRABAR</button>
-        <button class="btn" style="background:#007bff;">VOL +</button>
-        <button class="btn" style="background:#007bff;">VOL -</button>
+    <div class="controles">
+        <button class="boton" onclick="alert('Foto guardada')">📸 FOTO</button>
+        <button class="boton" style="color: #ff4444;">🔴 REC</button>
+        <button class="boton">🔆 BRILLO</button>
+        <button class="boton">🔍 ZOOM</button>
     </div>
 
     <script>
-        const v = document.getElementById('v');
-        const s = document.getElementById('selector');
-        const l = document.getElementById('log');
-        let st = null;
-
-        async function conectarTodo() {
+        async function iniciarCamara() {
+            const video = document.getElementById('camara');
+            const info = document.getElementById('info');
+            
             try {
-                l.innerText = "ESCANEANDO HARDWARE...";
-                const p = await navigator.mediaDevices.getUserMedia({ video: true });
-                p.getTracks().forEach(t => t.stop());
-
-                const d = await navigator.mediaDevices.enumerateDevices();
-                const c = d.filter(i => i.kind === 'videoinput');
-
-                s.innerHTML = '<option value="">-- ELIGE DISPOSITIVO --</option>';
-                c.forEach((m, i) => {
-                    const o = document.createElement('option');
-                    o.value = m.deviceId;
-                    o.text = m.label || `Cámara Externa ${i + 1}`;
-                    s.appendChild(o);
-                });
-
-                s.style.display = 'block';
-                l.innerText = "BUSCA 'USB CAMERA' O 'EXTERNAL' EN LA LISTA";
+                info.innerText = "SISTEMA: ACCEDIENDO A LENTE...";
                 
-                // Si hay más de 2 cámaras, intentamos abrir la última automáticamente
-                if(c.length > 2) cambiarCamara(c[c.length-1].deviceId);
-
-            } catch (e) {
-                l.innerText = "ERROR: DALE PERMISOS DE CÁMARA A CHROME";
-            }
-        }
-
-        async function cambiarCamara(id) {
-            if (!id) return;
-            if (st) st.getTracks().forEach(t => t.stop());
-            try {
-                st = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: id } } });
-                v.srcObject = st;
-                l.innerText = "RECIBIENDO SEÑAL...";
+                // Intenta buscar la cámara trasera (entorno) directamente
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: { exact: "environment" },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    } 
+                });
+                
+                video.srcObject = stream;
+                info.innerText = "SISTEMA: ONLINE";
+                document.querySelector('.btn-lens').style.display = 'none'; // Desaparece al activar
+                
             } catch (err) {
-                l.innerText = "ERROR AL ENGANCHAR VIDEO";
+                // Si falla la trasera (o estás en PC), usa cualquier cámara disponible
+                const fallback = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = fallback;
+                info.innerText = "SISTEMA: MODO COMPATIBILIDAD";
             }
         }
     </script>
