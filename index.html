@@ -3,111 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>XKOEN PRO - DATA LINK</title>
+    <title>XKOEN PRO BYPASS</title>
     <style>
-        body { background: #000; color: #00ff00; font-family: 'Courier New', monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        #terminal { height: 160px; padding: 15px; font-size: 11px; background: #050505; border-bottom: 2px solid #00ff00; overflow-y: auto; color: #0f0; }
-        #display-area { flex-grow: 1; display: flex; align-items: center; justify-content: center; background: #111; position: relative; }
+        body { background: #000; color: #00ff00; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #terminal { height: 150px; padding: 15px; font-size: 11px; background: #050505; border-bottom: 2px solid #00ff00; overflow-y: auto; text-align: left; }
+        #visor-area { flex-grow: 1; background: #111; display: flex; align-items: center; justify-content: center; }
         canvas { width: 100%; height: 100%; object-fit: contain; background: #000; }
         .controles { padding: 25px; background: #111; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .btn-main { grid-column: span 2; padding: 30px; background: #ff0000; color: #fff; border: none; border-radius: 15px; font-weight: bold; font-size: 20px; cursor: pointer; box-shadow: 0 0 20px rgba(255,0,0,0.3); }
-        .btn-bt { background: #222; color: #0ff; border: 1px solid #0ff; padding: 15px; border-radius: 10px; font-weight: bold; }
-        .status-on { background: #fff !important; color: #ff0000 !important; border: 3px solid #ff0000; }
+        .btn-play { grid-column: span 2; padding: 30px; background: #ff0000; color: #fff; border: none; border-radius: 15px; font-weight: bold; font-size: 20px; cursor: pointer; }
+        .btn-bt { background: #222; color: #00ff00; border: 1px solid #00ff00; padding: 15px; border-radius: 10px; font-weight: bold; }
+        .activo { background: #fff !important; color: #ff0000 !important; border: 3px solid #ff0000; }
     </style>
 </head>
 <body>
 
-<div id="terminal">>> INICIANDO PROTOCOLO SJ_SDK...<br>>> ESTADO: ESPERANDO CONEXIÓN BLUETOOTH</div>
+<div id="terminal">>> SISTEMA: ONLINE<br>>> MODO: DATA-LINK (TIPO MIT APP INVENTOR)<br>>> ESPERANDO CONEXIÓN...</div>
 
-<div id="display-area">
+<div id="visor-area">
     <canvas id="canvas-view"></canvas>
 </div>
 
 <div class="controles">
-    <button id="master-btn" class="btn-main" onclick="activarFlujoSJ()">🔴 ENCENDER Y GRABAR</button>
-    <button class="btn-bt" onclick="conectarGafas()">🔗 VINCULAR GAFAS</button>
-    <button onclick="location.reload()" style="background:none; border:none; color:#444;">REINICIAR</button>
+    <button id="btn-master" class="btn-play" onclick="accionGafas()">🔴 ENCENDER Y GRABAR</button>
+    <button class="btn-bt" onclick="conectarBT()">🔗 VINCULAR BT</button>
+    <button onclick="location.reload()" style="background:none; border:none; color:#444;">RESET</button>
 </div>
 
 <script>
     const log = document.getElementById('terminal');
-    const btn = document.getElementById('master-btn');
-    const canvas = document.getElementById('canvas-view');
-    const ctx = canvas.getContext('2d');
-    
-    let gattServer, dataChar;
-    let isStreaming = false;
+    const btn = document.getElementById('btn-master');
+    let gatt, char;
+    let prendido = false;
 
     function print(msg) { log.innerHTML += `<br>>> ${msg}`; log.scrollTop = log.scrollHeight; }
 
-    // Función 1: Conexión idéntica a MIT App Inventor
-    async function conectarGafas() {
+    async function conectarBT() {
         try {
             print("Escaneando XKOENPRO_282B...");
             const device = await navigator.bluetooth.requestDevice({
                 filters: [{ namePrefix: 'XKOEN' }],
                 optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb']
             });
-
-            print("Conectando al Socket de Datos...");
-            gattServer = await device.gatt.connect();
-            const service = await gattServer.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
-            dataChar = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
-
-            print("ENLACE EXITOSO CON: " + device.name);
-            btn.innerText = "▶️ INICIAR FLUJO SJ";
-            btn.style.background = "#00ff00";
+            
+            print("Conectando al Socket...");
+            gatt = await device.gatt.connect();
+            const service = await gatt.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
+            char = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
+            
+            print("VINCULADO: " + device.name);
+            btn.innerText = "▶️ INICIAR LENTE";
+            btn.style.background = "#0f0";
             btn.style.color = "#000";
-        } catch (e) {
-            print("ERROR: " + e.message);
-        }
+        } catch (e) { print("ERROR: " + e.message); }
     }
 
-    // Función 2: El Botón "Play" que envía los bytes de Lensmoo
-    async function activarFlujoSJ() {
-        if (!dataChar) {
-            print("ERROR: PRIMERO DEBE VINCULAR LAS GAFAS.");
-            return;
-        }
+    async function accionGafas() {
+        if (!char) { print("ERROR: VINCULA EL BT PRIMERO"); return; }
 
         try {
-            if (!isStreaming) {
-                // COMANDO HEXADECIMAL DE LORENSMOO/SJ_SDK: [AB 01 03 01 00 01]
-                const startBytes = new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x01]);
-                await dataChar.writeValue(startBytes);
-                
-                print("COMANDO 'PLAY' ENVIADO. DESPERTANDO LENTE...");
-                
-                btn.classList.add('status-on');
-                btn.innerText = "⏹️ DETENER GRABACIÓN";
-                isStreaming = true;
-                
-                // Empezar a escuchar los paquetes de datos (Igual que el reloj de MIT)
-                escucharPaquetes();
+            if (!prendido) {
+                // Comando Lensmoo/SJ_SDK: [AB 01 03 01 00 01]
+                const play = new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x01]);
+                await char.writeValue(play);
+                print("PLAY ENVIADO. RECIBIENDO DATOS...");
+                btn.innerText = "⏹️ DETENER";
+                btn.classList.add('activo');
+                prendido = true;
             } else {
-                const stopBytes = new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x00]);
-                await dataChar.writeValue(stopBytes);
-                
-                print("COMANDO 'STOP' ENVIADO.");
-                btn.classList.remove('status-on');
+                const stop = new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x00]);
+                await char.writeValue(stop);
+                print("STOP ENVIADO.");
                 btn.innerText = "🔴 ENCENDER Y GRABAR";
-                btn.style.background = "#ff0000";
-                btn.style.color = "#fff";
-                isStreaming = false;
+                btn.classList.remove('activo');
+                btn.style.background = "#f00";
+                prendido = false;
             }
-        } catch (err) {
-            print("FALLO EN COMANDO: " + err.message);
-        }
-    }
-
-    function escucharPaquetes() {
-        print("MODO ESCUCHA ACTIVADO. RECIBIENDO BYTES...");
-        dataChar.startNotifications();
-        dataChar.addEventListener('characteristicvaluechanged', (event) => {
-            const chunk = event.target.value;
-            // Aquí se procesan los datos del SJ_SDK
-            // Si llegan datos, el canvas se moverá.
-        });
+        } catch (err) { print("FALLO: " + err.message); }
     }
 </script>
 </body>
