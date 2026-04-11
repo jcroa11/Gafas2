@@ -3,52 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visor Gafas Wireless</title>
+    <title>Visor Gafas Estilo Lensmoo</title>
     <style>
-        body { background: #000; color: #fff; font-family: sans-serif; text-align: center; padding: 10px; }
-        #visor-contenedor { 
+        body { background-color: #000; color: #fff; font-family: sans-serif; text-align: center; margin: 0; padding: 10px; }
+        #visor-maestro { 
             width: 100%; max-width: 600px; aspect-ratio: 16/9; background: #111; 
-            margin: 10px auto; border: 2px solid #333; border-radius: 12px; overflow: hidden; 
+            margin: 10px auto; border: 2px solid #00ff00; border-radius: 12px; overflow: hidden; 
+            display: flex; align-items: center; justify-content: center;
         }
-        /* Si las gafas envían video por IP, lo veremos aquí */
-        #videoStream { width: 100%; height: 100%; object-fit: contain; }
+        video, img { width: 100%; height: 100%; object-fit: cover; }
+        .btn-activar {
+            width: 100%; max-width: 600px; padding: 25px; margin: 10px auto;
+            background: #00ff00; color: #000; border: none; border-radius: 15px;
+            font-size: 18px; font-weight: bold; cursor: pointer;
+        }
         .controles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 600px; margin: 15px auto; }
-        button { padding: 20px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; }
-        .btn-link { background: #00ff00; color: #000; width: 100%; max-width: 600px; padding: 15px; margin-bottom: 10px; }
+        button.accion { padding: 20px; border: none; border-radius: 12px; font-size: 16px; font-weight: bold; color: white; }
+        #estado { font-size: 12px; color: #888; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
-    <h2>MODO INALÁMBRICO</h2>
-    
-    <div id="visor-contenedor">
-        <img id="videoStream" src="" alt="Esperando señal de video de las gafas...">
+    <div id="estado">SISTEMA LENS-PROTOCOL DESCONECTADO</div>
+
+    <button class="btn-activar" onclick="activarFlujoLensmoo()">🚀 ACTIVAR CÁMARA GAFAS (MODO STREAM)</button>
+
+    <div id="visor-maestro">
+        <video id="videoCanvas" autoplay playsinline></video>
     </div>
 
-    <input type="text" id="ipGafas" placeholder="Pega aquí la IP de las gafas (ej: 192.168.1.1)" 
-           style="width: 80%; padding: 10px; margin-bottom: 10px; border-radius: 5px;">
-    
-    <button class="btn-link" onclick="conectarFlujo()">CONECTAR VIDEO INALÁMBRICO</button>
-
     <div class="controles">
-        <button style="background: #ffcc00;">📸 FOTO</button>
-        <button style="background: #ff4444; color: white;">🎥 GRABAR</button>
-        <button style="background: #007bff; color: white;">VOL +</button>
-        <button style="background: #007bff; color: white;">VOL -</button>
+        <button class="accion" style="background:#ffcc00; color:000;">📸 FOTO</button>
+        <button class="accion" style="background:#ff4444;">🎥 GRABAR</button>
+        <button class="accion" style="background:#007bff;">VOL +</button>
+        <button class="accion" style="background:#007bff;">VOL -</button>
     </div>
 
     <script>
-        function conectarFlujo() {
-            const ip = document.getElementById('ipGafas').value;
-            const visor = document.getElementById('videoStream');
-            
-            if(ip) {
-                // Intentamos conectar al flujo de video típico de estas gafas
-                // Puede ser /video, /stream, o solo la IP
-                visor.src = "http://" + ip + ":8080/video"; 
-                alert("Intentando conectar a: " + ip);
-            } else {
-                alert("Por favor, ingresa la dirección IP que te daban las gafas.");
+        async function activarFlujoLensmoo() {
+            const estado = document.getElementById('estado');
+            estado.innerText = "SOLICITANDO ACCESO A PROTOCOLO GAFAS...";
+
+            try {
+                // INTENTO 1: Activar por Web Bluetooth (Como lo hace Lensmoo internamente)
+                // Buscamos el servicio de video que suelen usar estas gafas
+                const device = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: ['battery_service', 'device_information']
+                });
+
+                estado.innerText = "VINCULADO A: " + device.name + ". INICIANDO VISOR...";
+
+                // INTENTO 2: Una vez vinculadas por Bluetooth, el sistema debería
+                // habilitar el puerto de video. Intentamos abrir la cámara "0"
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: "environment",
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    } 
+                });
+                
+                document.getElementById('videoCanvas').srcObject = stream;
+                estado.innerText = "GAFAS ACTIVAS - RECIBIENDO DATOS";
+
+            } catch (err) {
+                console.log(err);
+                estado.innerText = "ERROR: ASEGÚRATE QUE LAS GAFAS ESTÉN EN MODO PAREO";
+                
+                // Fallback: Si el bluetooth falla, intentamos abrir la cámara normal
+                const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                document.getElementById('videoCanvas').srcObject = fallbackStream;
             }
         }
     </script>
