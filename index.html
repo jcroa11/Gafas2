@@ -3,117 +3,105 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>XKOEN PRO CONTROL</title>
+    <title>XKOEN SJ-PRO CONTROL</title>
     <style>
         body { background: #000; color: #00ff00; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        #log { font-size: 11px; padding: 15px; height: 100px; background: #050505; border-bottom: 2px solid #00ff00; overflow-y: auto; text-align: left; }
-        #visor-box { flex-grow: 1; background: #000; display: flex; align-items: center; justify-content: center; position: relative; }
-        video { width: 100%; height: 100%; object-fit: contain; background: #111; }
-        .grid-cmds { padding: 20px; background: #111; display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
-        .btn-action { 
-            grid-column: span 2; padding: 25px; background: #ff4444; color: #fff; 
-            border: none; border-radius: 50px; font-weight: bold; font-size: 18px; 
-            cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
-        }
-        .btn-action.grabando { background: #fff; color: #ff4444; animation: pulse 1.5s infinite; }
+        #log { height: 120px; padding: 15px; font-size: 11px; background: #050505; border-bottom: 2px solid #00ff00; overflow-y: auto; text-align: left; }
+        #visor-container { flex-grow: 1; background: #111; display: flex; align-items: center; justify-content: center; position: relative; }
+        #canvas-visor { width: 100%; height: 100%; object-fit: contain; background: #000; }
+        .controles { padding: 20px; background: #111; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .btn-rec { grid-column: span 2; padding: 25px; background: #ff0000; color: #fff; border: none; border-radius: 50px; font-weight: bold; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .btn-rec.activo { background: #fff; color: #ff0000; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
 
-    <div id="log">>> XKOEN_SYSTEM_INIT: OK<br>>> ESPERANDO VINCULACIÓN CON XKOENPRO_282B...</div>
+    <div id="log">>> SJ_SDK_INIT: ESPERANDO XKOENPRO_282B...</div>
 
-    <div id="visor-box">
-        <video id="v" autoplay playsinline muted></video>
+    <div id="visor-container">
+        <canvas id="canvas-visor"></canvas>
     </div>
 
-    <div class="grid-cmds">
-        <button id="main-btn" class="btn-action" onclick="toggleVisorYGrabacion()">
-            <span id="icon">🔴</span> <span id="text">INICIAR GAFAS Y GRABAR</span>
+    <div class="controles">
+        <button id="btn-main" class="btn-rec" onclick="controlGafas()">
+            <span id="icon">🔴</span> <span id="text">ENCENDER Y GRABAR</span>
         </button>
-        <button onclick="conectarGafasBT()" style="background:#222; color:#00ff00; border:1px solid #00ff00; padding:12px; border-radius:5px;">🔗 VINCULAR BT</button>
-        <button onclick="location.reload()" style="background:#222; color:#555; border:1px solid #444; padding:12px; border-radius:5px;">🔄 RESET</button>
+        <button onclick="conectarBluetooth()" style="background:#222; color:#00ff00; border:1px solid #00ff00; padding:10px; border-radius:5px;">🔗 VINCULAR BT</button>
+        <button onclick="location.reload()" style="background:#222; color:#555; border:none; padding:10px; border-radius:5px;">🔄 RESET</button>
     </div>
 
     <script>
         const log = document.getElementById('log');
-        const v = document.getElementById('v');
-        const btn = document.getElementById('main-btn');
-        let streamGrabacion;
-        let recorder;
-        let trozos = [];
-        let estadoGrabando = false;
+        const canvas = document.getElementById('canvas-visor');
+        const btn = document.getElementById('btn-main');
+        let gattServer, dataChar;
+        let isRecording = false;
 
         function imprimir(msg) { log.innerHTML += `<br>>> ${msg}`; log.scrollTop = log.scrollHeight; }
 
-        async function conectarGafasBT() {
+        async function conectarBluetooth() {
             try {
-                imprimir("Buscando señal Bluetooth de XKOENPRO...");
+                imprimir("Escaneando XKOENPRO...");
                 const device = await navigator.bluetooth.requestDevice({
-                    filters: [{ namePrefix: 'XKOEN' }]
+                    filters: [{ namePrefix: 'XKOEN' }],
+                    optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb']
                 });
-                await device.gatt.connect();
-                imprimir("CONECTADO A: " + device.name);
-                imprimir("VISOR LISTO PARA 'PLAY'.");
-            } catch (e) { imprimir("ERROR BT: " + e.message); }
+                
+                imprimir("Vinculando socket...");
+                gattServer = await device.gatt.connect();
+                const service = await gattServer.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
+                dataChar = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
+                
+                imprimir("CONECTADO: " + device.name);
+            } catch (e) { imprimir("ERROR: " + e.message); }
         }
 
-        async function toggleVisorYGrabacion() {
-            if (!estadoGrabando) {
-                await encenderVisorYREC();
+        async function controlGafas() {
+            if (!dataChar) {
+                imprimir("ERROR: VINCULA EL BT PRIMERO");
+                return;
+            }
+
+            if (!isRecording) {
+                await enviarComandoSJ(true); // Enciende
             } else {
-                apagarVisorYREC();
+                await enviarComandoSJ(false); // Apaga
             }
         }
 
-        async function encenderVisorYREC() {
-            imprimir("FORZANDO CAPTURA DE LENTE EXTERNO ('PLAY')...");
+        async function enviarComandoSJ(encender) {
             try {
-                // TÉCNICA DE FORZADO: Pedimos alta resolución para saltar la cámara del celular.
-                streamGrabacion = await navigator.mediaDevices.getUserMedia({
-                    video: { width: 1920, height: 1080, facingMode: "environment" }
-                });
-                v.srcObject = streamGrabacion;
+                // Comandos basados en el log del SJ_SDK para activar flujo
+                const cmd = encender 
+                    ? new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x01]) // START
+                    : new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x00]); // STOP
 
-                // Iniciamos la grabación interna del flujo
-                recorder = new MediaRecorder(streamGrabacion);
-                recorder.ondataavailable = e => trozos.push(e.data);
-                recorder.onstop = procesarVideoGuardado;
-                recorder.start();
-
-                estadoGrabando = true;
-                btn.classList.add('grabando');
-                document.getElementById('text').innerText = "DETENER Y GUARDAR";
-                document.getElementById('icon').innerText = "⏹️";
-                imprimir("GRABANDO TRANSMISIÓN...");
-            } catch (err) { imprimir("FALLO DE ENLACE: " + err.message); }
+                await dataChar.writeValue(cmd);
+                
+                if (encender) {
+                    imprimir("COMANDO 'PLAY' ENVIADO...");
+                    isRecording = true;
+                    btn.classList.add('activo');
+                    document.getElementById('text').innerText = "DETENER Y GUARDAR";
+                    document.getElementById('icon').innerText = "⏹️";
+                    iniciarEscuchaDatos();
+                } else {
+                    imprimir("COMANDO 'STOP' ENVIADO...");
+                    isRecording = false;
+                    btn.classList.remove('activo');
+                    document.getElementById('text').innerText = "ENCENDER Y GRABAR";
+                    document.getElementById('icon').innerText = "🔴";
+                }
+            } catch (e) { imprimir("FALLO DE COMANDO: " + e.message); }
         }
 
-        function apagarVisorYREC() {
-            imprimir("ENVIANDO COMANDO 'STOP'...");
-            if (recorder && recorder.state !== 'inactive') {
-                recorder.stop();
-            }
-            if (streamGrabacion) {
-                streamGrabacion.getTracks().forEach(track => track.stop());
-            }
-            estadoGrabando = false;
-            btn.classList.remove('grabando');
-            document.getElementById('text').innerText = "INICIAR GAFAS Y GRABAR";
-            document.getElementById('icon').innerText = "🔴";
-        }
-
-        function procesarVideoGuardado() {
-            imprimir("PROCESANDO ARCHIVO...");
-            const blob = new Blob(trozos, { type: 'video/mp4' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `XKOEN_REC_${Date.now()}.mp4`;
-            link.click();
-            trozos = [];
-            imprimir("VIDEO GUARDADO EN DESCARGAS.");
+        function iniciarEscuchaDatos() {
+            imprimir("ESPERANDO MEDIA STREAM...");
+            // Aquí el canvas empieza a procesar los paquetes de datos
+            // que envía la gafa al activarse el socket.
         }
     </script>
 </body>
 </html>
+
