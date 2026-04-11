@@ -3,57 +3,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visor Gafas Pro</title>
+    <title>VISOR GAFAS PRO</title>
     <style>
         body { background: #000; color: #fff; font-family: sans-serif; text-align: center; margin: 0; padding: 10px; }
-        #visor { width: 100%; max-width: 600px; aspect-ratio: 16/9; background: #111; margin: 10px auto; border: 2px solid #00ff00; border-radius: 12px; overflow: hidden; }
+        #visor-box { width: 100%; max-width: 600px; aspect-ratio: 16/9; background: #111; margin: 10px auto; border: 3px solid #00ff00; border-radius: 15px; overflow: hidden; }
         video { width: 100%; height: 100%; object-fit: cover; }
-        .btn-vinculo { width: 100%; max-width: 600px; padding: 25px; background: #00ff00; color: #000; border: none; border-radius: 15px; font-size: 20px; font-weight: bold; cursor: pointer; margin-bottom: 10px; }
-        .controles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 600px; margin: 10px auto; }
-        button.accion { padding: 20px; border: none; border-radius: 12px; font-weight: bold; color: white; text-transform: uppercase; }
-        #estado { color: #0f0; background: #222; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 14px; }
+        .btn-link { width: 100%; max-width: 600px; padding: 25px; background: #00ff00; color: #000; border: none; border-radius: 15px; font-size: 22px; font-weight: bold; cursor: pointer; margin-bottom: 10px; }
+        #selector { width: 100%; max-width: 600px; padding: 15px; background: #222; color: #fff; border: 1px solid #555; border-radius: 10px; margin-bottom: 15px; display: none; }
+        .grid-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 600px; margin: 0 auto; }
+        .btn { padding: 20px; border: none; border-radius: 10px; font-weight: bold; color: #fff; text-transform: uppercase; }
+        #log { font-size: 12px; color: #0f0; margin-bottom: 5px; }
     </style>
 </head>
 <body>
 
-    <div id="estado">SISTEMA LISTO</div>
+    <div id="log">SISTEMA INICIALIZADO</div>
 
-    <button class="btn-vinculo" onclick="conectarBluetooth()">🔗 CONECTAR GAFAS (BLUETOOTH)</button>
+    <button class="btn-link" onclick="conectarTodo()">🚀 ACTIVAR GAFAS</button>
 
-    <div id="visor">
-        <video id="webcam" autoplay playsinline muted></video>
+    <select id="selector" onchange="cambiarCamara(this.value)"></select>
+
+    <div id="visor-box">
+        <video id="v" autoplay playsinline muted></video>
     </div>
 
-    <div class="controles">
-        <button class="accion" style="background:#ffcc00; color:000;">📸 FOTO</button>
-        <button class="accion" style="background:#ff4444;">🎥 GRABAR</button>
-        <button class="accion" style="background:#007bff;">VOL +</button>
-        <button class="accion" style="background:#007bff;">VOL -</button>
+    <div class="grid-btns">
+        <button class="btn" style="background:#ffcc00; color:#000;">📸 FOTO</button>
+        <button class="btn" style="background:#ff4444;">🎥 GRABAR</button>
+        <button class="btn" style="background:#007bff;">VOL +</button>
+        <button class="btn" style="background:#007bff;">VOL -</button>
     </div>
 
     <script>
-        const video = document.getElementById('webcam');
-        const estado = document.getElementById('estado');
+        const v = document.getElementById('v');
+        const s = document.getElementById('selector');
+        const l = document.getElementById('log');
+        let st = null;
 
-        async function conectarBluetooth() {
+        async function conectarTodo() {
             try {
-                estado.innerText = "BUSCANDO DISPOSITIVO...";
-                // Esto abre la ventana para elegir las gafas
-                await navigator.bluetooth.requestDevice({ acceptAllDevices: true });
-                
-                estado.innerText = "GAFAS VINCULADAS. CARGANDO VIDEO...";
+                l.innerText = "ESCANEANDO HARDWARE...";
+                const p = await navigator.mediaDevices.getUserMedia({ video: true });
+                p.getTracks().forEach(t => t.stop());
 
-                // Intentamos capturar el video
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: "environment" }
+                const d = await navigator.mediaDevices.enumerateDevices();
+                const c = d.filter(i => i.kind === 'videoinput');
+
+                s.innerHTML = '<option value="">-- ELIGE DISPOSITIVO --</option>';
+                c.forEach((m, i) => {
+                    const o = document.createElement('option');
+                    o.value = m.deviceId;
+                    o.text = m.label || `Cámara Externa ${i + 1}`;
+                    s.appendChild(o);
                 });
-                video.srcObject = stream;
+
+                s.style.display = 'block';
+                l.innerText = "BUSCA 'USB CAMERA' O 'EXTERNAL' EN LA LISTA";
                 
+                // Si hay más de 2 cámaras, intentamos abrir la última automáticamente
+                if(c.length > 2) cambiarCamara(c[c.length-1].deviceId);
+
+            } catch (e) {
+                l.innerText = "ERROR: DALE PERMISOS DE CÁMARA A CHROME";
+            }
+        }
+
+        async function cambiarCamara(id) {
+            if (!id) return;
+            if (st) st.getTracks().forEach(t => t.stop());
+            try {
+                st = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: id } } });
+                v.srcObject = st;
+                l.innerText = "RECIBIENDO SEÑAL...";
             } catch (err) {
-                estado.innerText = "ERROR O CANCELADO. REINTENTA.";
-                // Si falla el Bluetooth, abrimos la cámara del celu para que no quede en negro
-                const fallback = await navigator.mediaDevices.getUserMedia({ video: true });
-                video.srcObject = fallback;
+                l.innerText = "ERROR AL ENGANCHAR VIDEO";
             }
         }
     </script>
