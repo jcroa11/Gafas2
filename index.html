@@ -3,81 +3,89 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SISTEMA GAFAS LENS</title>
+    <title>VISOR XKOEN PRO</title>
     <style>
-        body { background: #000; color: #00ff00; font-family: 'Courier New', monospace; margin: 0; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
-        #visor { flex-grow: 1; background: #050505; position: relative; border-bottom: 2px solid #00ff00; display: flex; align-items: center; justify-content: center; }
+        body { background: #000; color: #00ff00; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        #log { font-size: 10px; padding: 10px; height: 80px; background: #050505; border-bottom: 1px solid #00ff00; overflow-y: auto; }
+        #visor-box { flex-grow: 1; position: relative; display: flex; align-items: center; justify-content: center; background: #000; }
         video { width: 100%; height: 100%; object-fit: contain; }
-        .terminal { position: absolute; top: 10px; left: 10px; font-size: 10px; background: rgba(0,0,0,0.8); padding: 5px; z-index: 10; border-left: 2px solid #00ff00; }
-        .controles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 20px; background: #111; height: 150px; }
-        .btn { background: #222; border: 1px solid #444; color: #fff; border-radius: 10px; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; text-align: center; }
+        .controles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 15px; background: #111; }
+        .btn { background: #222; border: 1px solid #00ff00; color: #00ff00; padding: 15px 0; border-radius: 8px; font-size: 11px; font-weight: bold; text-align: center; cursor: pointer; }
         .btn:active { background: #00ff00; color: #000; }
-        #btn-conectar { position: absolute; z-index: 20; padding: 20px; background: #00ff00; color: #000; border: none; font-weight: bold; border-radius: 50px; cursor: pointer; box-shadow: 0 0 20px #00ff00; }
+        #selector-cam { position: absolute; top: 10px; width: 85%; background: #00ff00; color: #000; padding: 12px; border-radius: 5px; font-weight: bold; z-index: 100; border: none; }
     </style>
 </head>
 <body>
 
-    <div id="visor">
-        <div class="terminal" id="log">>> SISTEMA: LISTO<br>>> ESPERANDO ENLACE...</div>
-        <button id="btn-conectar" onclick="activarLente()">ACTIVAR LENTE GAFAS</button>
+    <div id="log">>> SISTEMA XKOEN: ONLINE<br>>> SELECCIONE CÁMARA EXTERNA...</div>
+
+    <div id="visor-box">
+        <select id="selector-cam" onchange="conectarCamara(this.value)">
+            <option value="">-- TOCAR AQUÍ PARA ELEGIR LENTE --</option>
+        </select>
         <video id="v" autoplay playsinline muted></video>
     </div>
 
     <div class="controles">
-        <div class="btn" onclick="alert('Capturando...')">📸<br>FOTO</div>
-        <div class="btn" style="color:red">🔴<br>REC</div>
-        <div class="btn">🔆<br>BRILLO</div>
-        <div class="btn" onclick="location.reload()">🔄<br>RESET</div>
+        <div class="btn" onclick="alert('Capturando...')">📸 FOTO</div>
+        <div class="btn" style="color:#ff4444; border-color:#ff4444;">🔴 REC</div>
+        <div class="btn">🔆 BRILLO</div>
+        <div class="btn" onclick="location.reload()">🔄 RESET</div>
     </div>
 
     <script>
         const video = document.getElementById('v');
         const log = document.getElementById('log');
-        const btn = document.getElementById('btn-conectar');
+        const selector = document.getElementById('selector-cam');
 
         function imprimir(msg) {
             log.innerHTML += `<br>>> ${msg}`;
             log.scrollTop = log.scrollHeight;
         }
 
-        async function activarLente() {
+        async function cargarLentes() {
             try {
-                imprimir("ESCANEANDO HARDWARE...");
-                
-                // Pedir permisos primero
+                // Pedimos permiso para que aparezcan los nombres reales
                 await navigator.mediaDevices.getUserMedia({ video: true });
-                
-                // Listar todas las cámaras
                 const dispositivos = await navigator.mediaDevices.enumerateDevices();
                 const camaras = dispositivos.filter(d => d.kind === 'videoinput');
-                
+
                 imprimir(`DETECTADAS: ${camaras.length} CÁMARAS`);
 
-                // LÓGICA DE SALTO: Si hay más de una, la última suele ser la externa/gafas
-                let seleccionado = camaras[camaras.length - 1].deviceId;
-
-                const config = {
-                    video: {
-                        deviceId: { exact: seleccionado },
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    }
-                };
-
-                const stream = await navigator.mediaDevices.getUserMedia(config);
-                video.srcObject = stream;
-                
-                imprimir("ESTADO: TRANSMITIENDO");
-                btn.style.display = 'none'; // Ocultar botón tras conectar
-
+                camaras.forEach((cam, i) => {
+                    const opt = document.createElement('option');
+                    opt.value = cam.deviceId;
+                    // Buscamos la que diga "USB" o "External", si no, ponemos el índice
+                    opt.text = cam.label || `Lente Externo ${i + 1}`;
+                    selector.appendChild(opt);
+                });
             } catch (err) {
-                imprimir("ERROR: REINTENTANDO CONEXIÓN GENÉRICA...");
-                // Si falla lo anterior, intenta abrir cualquier cámara trasera
-                const fallback = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-                video.srcObject = fallback;
-                btn.style.display = 'none';
+                imprimir("ERROR: DALE PERMISOS DE CÁMARA A CHROME");
             }
         }
+
+        async function conectarCamara(id) {
+            if (!id) return;
+            imprimir("VINCULANDO LENTE...");
+            
+            if (window.stream) {
+                window.stream.getTracks().forEach(t => t.stop());
+            }
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { deviceId: { exact: id }, width: 1280, height: 720 }
+                });
+                window.stream = stream;
+                video.srcObject = stream;
+                imprimir("TRANSMISIÓN ESTABLECIDA");
+                selector.style.opacity = "0.2"; // Lo opacamos para ver el video
+            } catch (e) {
+                imprimir("ERROR DE HARDWARE: INTENTA CON OTRA OPCIÓN");
+            }
+        }
+
+        window.onload = cargarLentes;
     </script>
 </body>
 </html>
