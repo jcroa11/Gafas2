@@ -3,76 +3,90 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>XKOEN SJ-SDK PRO</title>
+    <title>XKOEN PRO BYPASS</title>
     <style>
         body { background: #000; color: #00ff00; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        #log { height: 140px; padding: 15px; font-size: 11px; background: #050505; border-bottom: 2px solid #00ff00; overflow-y: auto; text-align: left; }
-        #visor { flex-grow: 1; display: flex; align-items: center; justify-content: center; background: #111; }
+        #log { height: 150px; padding: 15px; font-size: 11px; background: #050505; border-bottom: 2px solid #00ff00; overflow-y: auto; text-align: left; }
+        #visor-container { flex-grow: 1; background: #111; display: flex; align-items: center; justify-content: center; }
         canvas { width: 100%; height: 100%; object-fit: contain; background: #000; }
-        .controles { padding: 20px; background: #111; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .btn-rec { grid-column: span 2; padding: 25px; background: #ff0000; color: #fff; border: none; border-radius: 50px; font-weight: bold; font-size: 18px; cursor: pointer; }
-        .activo { background: #fff !important; color: #ff0000 !important; border: 2px solid #ff0000; }
+        .controles { padding: 25px; background: #111; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .btn-accion { grid-column: span 2; padding: 30px; background: #ff0000; color: #fff; border: none; border-radius: 15px; font-weight: bold; font-size: 20px; cursor: pointer; }
+        .btn-bt { background: #222; color: #00ff00; border: 1px solid #00ff00; padding: 15px; border-radius: 10px; font-size: 14px; }
     </style>
 </head>
 <body>
 
-<div id="log">>> SJ_SDK_INIT... OK<br>>> ESPERANDO XKOENPRO_282B</div>
+<div id="log">>> SISTEMA: ESPERANDO HARDWARE...<br>>> MODO: SJ_SDK DATA-LINK</div>
 
-<div id="visor">
+<div id="visor-container">
     <canvas id="canvas-visor"></canvas>
 </div>
 
 <div class="controles">
-    <button id="main-btn" class="btn-rec" onclick="controlGafas()">🔴 ENCENDER Y GRABAR</button>
-    <button onclick="conectarBT()" style="background:#222; color:#00ff00; border:1px solid #00ff00; padding:12px; border-radius:10px;">🔗 VINCULAR BT</button>
-    <button onclick="location.reload()" style="background:none; color:#444; border:none; font-size:10px;">RESET</button>
+    <button id="btn-master" class="btn-accion" onclick="controlGafas()">🔴 ENCENDER Y GRABAR</button>
+    <button class="btn-bt" onclick="conectarBT()">🔗 VINCULAR BT</button>
+    <button onclick="location.reload()" style="background:none; border:none; color:#444;">RESET</button>
 </div>
 
 <script>
-    const term = document.getElementById('log');
-    const btn = document.getElementById('main-btn');
-    let gatt, char;
-    let running = false;
+    const terminal = document.getElementById('log');
+    const masterBtn = document.getElementById('btn-master');
+    let gatt, characteristic;
+    let encendido = false;
 
-    function imprimir(msg) { term.innerHTML += `<br>>> ${msg}`; term.scrollTop = term.scrollHeight; }
+    function imprimir(msg) { terminal.innerHTML += `<br>>> ${msg}`; terminal.scrollTop = terminal.scrollHeight; }
 
     async function conectarBT() {
         try {
-            imprimir("Buscando XKOENPRO...");
+            imprimir("Buscando XKOENPRO_282B...");
             const device = await navigator.bluetooth.requestDevice({
                 filters: [{ namePrefix: 'XKOEN' }],
                 optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb']
             });
+            
+            imprimir("Conectando al socket...");
             gatt = await device.gatt.connect();
             const service = await gatt.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
-            char = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
-            imprimir("VINCULADO: " + device.name);
-            btn.innerText = "▶️ INICIAR LENTE";
-        } catch (e) { imprimir("ERROR: " + e.message); }
+            characteristic = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
+            
+            imprimir("ENLACE EXITOSO: " + device.name);
+            masterBtn.innerText = "▶️ INICIAR LENTE";
+            masterBtn.style.background = "#00ff00";
+            masterBtn.style.color = "#000";
+        } catch (e) {
+            imprimir("ERROR: " + e.message);
+        }
     }
 
     async function controlGafas() {
-        if (!char) { imprimir("ERROR: VINCULA EL BT"); return; }
-        
+        if (!characteristic) {
+            imprimir("ERROR: PRIMERO VINCULA EL BLUETOOTH");
+            return;
+        }
+
         try {
-            if (!running) {
-                // Comando PLAY según tu log de SJ_SDK
-                const play = new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x01]);
-                await char.writeValue(play);
-                imprimir("PLAY ENVIADO. GRABANDO...");
-                btn.innerText = "⏹️ DETENER";
-                btn.classList.add('activo');
-                running = true;
+            if (!encendido) {
+                // Comando SJ_SDK para "PLAY" (Sacado de tu log)
+                const playCmd = new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x01]);
+                await characteristic.writeValue(playCmd);
+                imprimir("COMANDO 'PLAY' ENVIADO. GRABANDO...");
+                masterBtn.innerText = "⏹️ DETENER Y GUARDAR";
+                masterBtn.style.background = "#fff";
+                masterBtn.style.color = "#ff0000";
+                encendido = true;
             } else {
                 // Comando STOP
-                const stop = new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x00]);
-                await char.writeValue(stop);
-                imprimir("STOP ENVIADO.");
-                btn.innerText = "🔴 ENCENDER Y GRABAR";
-                btn.classList.remove('activo');
-                running = false;
+                const stopCmd = new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x00]);
+                await characteristic.writeValue(stopCmd);
+                imprimir("COMANDO 'STOP' ENVIADO.");
+                masterBtn.innerText = "🔴 ENCENDER Y GRABAR";
+                masterBtn.style.background = "#ff0000";
+                masterBtn.style.color = "#fff";
+                encendido = false;
             }
-        } catch (err) { imprimir("FALLO: " + err.message); }
+        } catch (err) {
+            imprimir("FALLO DE HARDWARE: " + err.message);
+        }
     }
 </script>
 </body>
