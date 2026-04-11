@@ -3,33 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visor Gafas Estilo Lensmoo</title>
+    <title>Control Maestro Gafas</title>
     <style>
-        body { background-color: #000; color: #fff; font-family: sans-serif; text-align: center; margin: 0; padding: 10px; }
-        #visor-maestro { 
+        body { background: #000; color: #fff; font-family: sans-serif; text-align: center; margin: 0; padding: 10px; }
+        #visor-principal { 
             width: 100%; max-width: 600px; aspect-ratio: 16/9; background: #111; 
             margin: 10px auto; border: 2px solid #00ff00; border-radius: 12px; overflow: hidden; 
-            display: flex; align-items: center; justify-content: center;
         }
-        video, img { width: 100%; height: 100%; object-fit: cover; }
-        .btn-activar {
+        video { width: 100%; height: 100%; object-fit: cover; }
+        .btn-mac {
             width: 100%; max-width: 600px; padding: 25px; margin: 10px auto;
             background: #00ff00; color: #000; border: none; border-radius: 15px;
-            font-size: 18px; font-weight: bold; cursor: pointer;
+            font-size: 20px; font-weight: bold; cursor: pointer; text-transform: uppercase;
         }
         .controles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 600px; margin: 15px auto; }
         button.accion { padding: 20px; border: none; border-radius: 12px; font-size: 16px; font-weight: bold; color: white; }
-        #estado { font-size: 12px; color: #888; margin-bottom: 10px; }
+        #estado { color: #0f0; background: #222; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 14px; }
     </style>
 </head>
 <body>
 
-    <div id="estado">SISTEMA LENS-PROTOCOL DESCONECTADO</div>
+    <div id="estado">SISTEMA INICIALIZADO - ESPERANDO GAFAS</div>
 
-    <button class="btn-activar" onclick="activarFlujoLensmoo()">🚀 ACTIVAR CÁMARA GAFAS (MODO STREAM)</button>
+    <button class="btn-mac" onclick="vincularGafas()">🔗 CONECTAR A DIRECCIÓN MAC / GAFAS</button>
 
-    <div id="visor-maestro">
-        <video id="videoCanvas" autoplay playsinline></video>
+    <div id="visor-principal">
+        <video id="video" autoplay playsinline muted></video>
     </div>
 
     <div class="controles">
@@ -40,42 +39,44 @@
     </div>
 
     <script>
-        async function activarFlujoLensmoo() {
-            const estado = document.getElementById('estado');
-            estado.innerText = "SOLICITANDO ACCESO A PROTOCOLO GAFAS...";
+        const video = document.getElementById('video');
+        const estado = document.getElementById('estado');
 
+        async function vincularGafas() {
             try {
-                // INTENTO 1: Activar por Web Bluetooth (Como lo hace Lensmoo internamente)
-                // Buscamos el servicio de video que suelen usar estas gafas
+                estado.innerText = "ESCANEANDO DISPOSITIVOS BLUETOOTH...";
+                
+                // Intentamos despertar el protocolo Bluetooth del navegador
+                // Esto abrirá la lista donde aparecerá la MAC o el nombre de tus gafas
                 const device = await navigator.bluetooth.requestDevice({
                     acceptAllDevices: true,
                     optionalServices: ['battery_service', 'device_information']
                 });
 
-                estado.innerText = "VINCULADO A: " + device.name + ". INICIANDO VISOR...";
+                estado.innerText = "VINCULADO A: " + (device.name || device.id);
 
-                // INTENTO 2: Una vez vinculadas por Bluetooth, el sistema debería
-                // habilitar el puerto de video. Intentamos abrir la cámara "0"
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
+                // Una vez el Bluetooth da el "OK", forzamos al sistema a capturar el video
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
                         facingMode: "environment",
                         width: { ideal: 1280 },
                         height: { ideal: 720 }
-                    } 
+                    }
                 });
-                
-                document.getElementById('videoCanvas').srcObject = stream;
-                estado.innerText = "GAFAS ACTIVAS - RECIBIENDO DATOS";
+
+                video.srcObject = stream;
+                estado.innerText = "CONEXIÓN ESTABLECIDA - RECIBIENDO VIDEO";
 
             } catch (err) {
-                console.log(err);
-                estado.innerText = "ERROR: ASEGÚRATE QUE LAS GAFAS ESTÉN EN MODO PAREO";
+                console.error(err);
+                estado.innerText = "ERROR: SE CANCELÓ LA VINCULACIÓN O NO HAY PERMISO";
                 
-                // Fallback: Si el bluetooth falla, intentamos abrir la cámara normal
-                const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
-                document.getElementById('videoCanvas').srcObject = fallbackStream;
+                // Si el Bluetooth no activa el video, intentamos abrir la cámara de respaldo
+                const fallback = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = fallback;
             }
         }
     </script>
 </body>
 </html>
+
