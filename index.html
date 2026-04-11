@@ -3,89 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>VISOR XKOEN PRO</title>
+    <title>XKOEN PRO COMMANDER</title>
     <style>
-        body { background: #000; color: #00ff00; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        #log { font-size: 10px; padding: 10px; height: 80px; background: #050505; border-bottom: 1px solid #00ff00; overflow-y: auto; }
-        #visor-box { flex-grow: 1; position: relative; display: flex; align-items: center; justify-content: center; background: #000; }
-        video { width: 100%; height: 100%; object-fit: contain; }
-        .controles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 15px; background: #111; }
-        .btn { background: #222; border: 1px solid #00ff00; color: #00ff00; padding: 15px 0; border-radius: 8px; font-size: 11px; font-weight: bold; text-align: center; cursor: pointer; }
+        body { background: #000; color: #00ff00; font-family: 'Courier New', monospace; margin: 0; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
+        #log { font-size: 10px; padding: 10px; height: 100px; background: #050505; border-bottom: 1px solid #00ff00; overflow-y: auto; }
+        #visor-container { flex-grow: 1; position: relative; background: #000; display: flex; align-items: center; justify-content: center; }
+        video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+        .controles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 15px; background: #111; border-top: 1px solid #333; }
+        .btn { background: #222; border: 1px solid #00ff00; color: #00ff00; padding: 18px 0; border-radius: 8px; font-size: 11px; font-weight: bold; text-align: center; cursor: pointer; }
         .btn:active { background: #00ff00; color: #000; }
-        #selector-cam { position: absolute; top: 10px; width: 85%; background: #00ff00; color: #000; padding: 12px; border-radius: 5px; font-weight: bold; z-index: 100; border: none; }
+        /* El selector que va a forzar la entrada */
+        #selector-lente { position: absolute; top: 15px; width: 90%; background: #00ff00; color: #000; padding: 15px; border-radius: 5px; font-weight: bold; z-index: 100; border: none; font-size: 14px; }
     </style>
 </head>
 <body>
 
-    <div id="log">>> SISTEMA XKOEN: ONLINE<br>>> SELECCIONE CÁMARA EXTERNA...</div>
+    <div id="log">>> SISTEMA XKOEN: ONLINE<br>>> BUSCANDO HARDWARE EXTERNO...</div>
 
-    <div id="visor-box">
-        <select id="selector-cam" onchange="conectarCamara(this.value)">
-            <option value="">-- TOCAR AQUÍ PARA ELEGIR LENTE --</option>
+    <div id="visor-container">
+        <select id="selector-lente" onchange="forzarLente(this.value)">
+            <option value="">-- SELECCIONAR LENTE DE GAFAS --</option>
         </select>
-        <video id="v" autoplay playsinline muted></video>
+        <video id="video-visor" autoplay playsinline muted></video>
     </div>
 
     <div class="controles">
-        <div class="btn" onclick="alert('Capturando...')">📸 FOTO</div>
+        <div class="btn" onclick="alert('Captura OK')">📸 FOTO</div>
         <div class="btn" style="color:#ff4444; border-color:#ff4444;">🔴 REC</div>
         <div class="btn">🔆 BRILLO</div>
         <div class="btn" onclick="location.reload()">🔄 RESET</div>
     </div>
 
     <script>
-        const video = document.getElementById('v');
-        const log = document.getElementById('log');
-        const selector = document.getElementById('selector-cam');
+        const v = document.getElementById('video-visor');
+        const l = document.getElementById('log');
+        const s = document.getElementById('selector-lente');
 
-        function imprimir(msg) {
-            log.innerHTML += `<br>>> ${msg}`;
-            log.scrollTop = log.scrollHeight;
+        function print(msg) {
+            l.innerHTML += `<br>>> ${msg}`;
+            l.scrollTop = l.scrollHeight;
         }
 
-        async function cargarLentes() {
+        async function cargarDispositivos() {
             try {
-                // Pedimos permiso para que aparezcan los nombres reales
+                // Forzar la solicitud de permisos al inicio
                 await navigator.mediaDevices.getUserMedia({ video: true });
                 const dispositivos = await navigator.mediaDevices.enumerateDevices();
                 const camaras = dispositivos.filter(d => d.kind === 'videoinput');
 
-                imprimir(`DETECTADAS: ${camaras.length} CÁMARAS`);
+                print(`DETECTADAS: ${camaras.length} CÁMARAS`);
 
                 camaras.forEach((cam, i) => {
                     const opt = document.createElement('option');
                     opt.value = cam.deviceId;
-                    // Buscamos la que diga "USB" o "External", si no, ponemos el índice
+                    // Buscamos nombres como "USB" o el ID 3
                     opt.text = cam.label || `Lente Externo ${i + 1}`;
-                    selector.appendChild(opt);
+                    s.appendChild(opt);
                 });
+
+                print("LISTO. SELECCIONE EL LENTE EN EL MENÚ VERDE.");
             } catch (err) {
-                imprimir("ERROR: DALE PERMISOS DE CÁMARA A CHROME");
+                print("ERROR: DEBE DAR PERMISOS DE CÁMARA");
             }
         }
 
-        async function conectarCamara(id) {
+        async function forzarLente(id) {
             if (!id) return;
-            imprimir("VINCULANDO LENTE...");
+            print("VINCULANDO LENTE XKOEN...");
             
-            if (window.stream) {
-                window.stream.getTracks().forEach(t => t.stop());
+            // Detener transmisiones previas
+            if (window.st) {
+                window.st.getTracks().forEach(t => t.stop());
             }
 
             try {
+                // Intentamos abrir el lente con la máxima resolución posible
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { deviceId: { exact: id }, width: 1280, height: 720 }
+                    video: { deviceId: { exact: id }, width: 1920, height: 1080 }
                 });
-                window.stream = stream;
-                video.srcObject = stream;
-                imprimir("TRANSMISIÓN ESTABLECIDA");
-                selector.style.opacity = "0.2"; // Lo opacamos para ver el video
+                window.st = stream;
+                v.srcObject = stream;
+                print("TRANSMISIÓN ESTABLECIDA");
+                s.style.opacity = "0.2"; // Opacar para no tapar la vista
             } catch (e) {
-                imprimir("ERROR DE HARDWARE: INTENTA CON OTRA OPCIÓN");
+                print("FALLO DE ENLACE: PRUEBE OTRA OPCIÓN");
             }
         }
 
-        window.onload = cargarLentes;
+        window.onload = cargarDispositivos;
     </script>
 </body>
 </html>
