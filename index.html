@@ -3,93 +3,86 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>XKOEN SJ-SDK CONTROL</title>
+    <title>XKOEN PRO BYPASS</title>
     <style>
-        body { background: #000; color: #00ff00; font-family: 'Courier New', monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        #terminal { height: 140px; padding: 15px; font-size: 11px; background: #050505; border-bottom: 2px solid #00ff00; overflow-y: auto; text-align: left; box-sizing: border-box; }
+        body { background: #000; color: #00ff00; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #terminal { height: 130px; padding: 12px; font-size: 11px; background: #050505; border-bottom: 2px solid #00ff00; overflow-y: auto; text-align: left; }
         #visor-container { flex-grow: 1; background: #111; display: flex; align-items: center; justify-content: center; position: relative; }
         canvas { width: 100%; height: 100%; object-fit: contain; background: #000; }
         .controles { padding: 20px; background: #111; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .btn-main { grid-column: span 2; padding: 25px; background: #ff0000; color: #fff; border: none; border-radius: 50px; font-weight: bold; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; box-shadow: 0 0 15px rgba(255,0,0,0.4); }
-        .btn-main.activo { background: #fff; color: #ff0000; animation: pulse 1s infinite; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+        .btn-play { grid-column: span 2; padding: 25px; background: #ff0000; color: #fff; border: none; border-radius: 50px; font-weight: bold; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .btn-play.on { background: #fff; color: #ff0000; border: 2px solid #ff0000; }
     </style>
 </head>
 <body>
 
-    <div id="terminal">>> SJ_SDK_SYSTEM: READY<br>>> ESPERANDO ENLACE CON XKOENPRO_282B...</div>
+    <div id="terminal">>> SISTEMA XKOEN: ONLINE<br>>> MODO: DATA-LINK (SJ_SDK)</div>
 
     <div id="visor-container">
         <canvas id="canvas-visor"></canvas>
     </div>
 
     <div class="controles">
-        <button id="btn-master" class="btn-main" onclick="ejecutarAccion()">
-            <span id="icon">🔴</span> <span id="text">ENCENDER Y GRABAR</span>
+        <button id="btn-master" class="btn-play" onclick="accionPrincipal()">
+            <span id="ico">🔴</span> <span id="txt">CONECTAR Y GRABAR</span>
         </button>
-        <button onclick="conectarGafasBT()" style="background:#222; color:#00ff00; border:1px solid #00ff00; padding:15px; border-radius:10px; font-weight:bold;">🔗 VINCULAR BT</button>
-        <button onclick="location.reload()" style="background:#333; color:#888; border:none; padding:15px; border-radius:10px;">🔄 RESET</button>
+        <button onclick="vincularBT()" style="background:#222; color:#00ff00; border:1px solid #00ff00; padding:12px; border-radius:10px;">🔗 VINCULAR BT</button>
+        <button onclick="location.reload()" style="background:none; color:#444; border:none; font-size:10px;">🔄 RESET</button>
     </div>
 
     <script>
-        const term = document.getElementById('terminal');
+        const log = document.getElementById('terminal');
         const btn = document.getElementById('btn-master');
-        let gattServer, controlChar;
-        let isRunning = false;
+        let gatt, charControl;
+        let activo = false;
 
-        function log(msg) { term.innerHTML += `<br>>> ${msg}`; term.scrollTop = term.scrollHeight; }
+        function print(msg) { log.innerHTML += `<br>>> ${msg}`; log.scrollTop = log.scrollHeight; }
 
-        async function conectarGafasBT() {
+        async function vincularBT() {
             try {
-                log("Escaneando periférico XKOENPRO...");
+                print("Buscando XKOENPRO_282B...");
                 const device = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'XKOEN' }],
                     optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb']
                 });
-                
-                log("Abriendo Socket SJ_SDK...");
-                gattServer = await device.gatt.connect();
-                const service = await gattServer.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
-                controlChar = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
-                
-                log("VINCULADO: " + device.name);
-                log("LISTO PARA COMANDO START.");
-            } catch (e) { log("ERROR CONEXIÓN: " + e.message); }
+                gatt = await device.gatt.connect();
+                const service = await gatt.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
+                charControl = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
+                print("ENLACE ESTABLECIDO CON GAFAS.");
+                document.getElementById('txt').innerText = "INICIAR LENTE";
+            } catch (e) { print("ERROR: ACTIVA EL BLUETOOTH Y DA PERMISOS."); }
         }
 
-        async function ejecutarAccion() {
-            if (!controlChar) {
-                log("ERROR: DEBE VINCULAR EL BLUETOOTH PRIMERO.");
+        async function accionPrincipal() {
+            if (!charControl) {
+                await vincularBT();
                 return;
             }
 
             try {
-                if (!isRunning) {
-                    // COMANDO PLAY (Basado en SJ_SDK log)
-                    const startCmd = new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x01]);
-                    await controlChar.writeValue(startCmd);
+                if (!activo) {
+                    // COMANDO PLAY (Lensmoo Style)
+                    const playCmd = new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x01]);
+                    await charControl.writeValue(playCmd);
+                    print("COMANDO 'PLAY' ENVIADO. LENTE ACTIVADO.");
                     
-                    log("COMANDO 'ENCENDER' ENVIADO...");
-                    btn.classList.add('activo');
-                    document.getElementById('text').innerText = "DETENER Y GUARDAR";
-                    document.getElementById('icon').innerText = "⏹️";
-                    isRunning = true;
-                    
-                    log("ESCUCHANDO FLUJO DE DATOS...");
+                    btn.classList.add('on');
+                    document.getElementById('txt').innerText = "DETENER Y GUARDAR";
+                    document.getElementById('ico').innerText = "⏹️";
+                    activo = true;
                 } else {
                     // COMANDO STOP
                     const stopCmd = new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x00]);
-                    await controlChar.writeValue(stopCmd);
+                    await charControl.writeValue(stopCmd);
+                    print("COMANDO 'STOP' ENVIADO.");
                     
-                    log("COMANDO 'DETENER' ENVIADO.");
-                    btn.classList.remove('activo');
-                    document.getElementById('text').innerText = "ENCENDER Y GRABAR";
-                    document.getElementById('icon').innerText = "🔴";
-                    isRunning = false;
+                    btn.classList.remove('on');
+                    document.getElementById('txt').innerText = "CONECTAR Y GRABAR";
+                    document.getElementById('ico').innerText = "🔴";
+                    activo = false;
                 }
-            } catch (err) { log("FALLO HARDWARE: " + err.message); }
+            } catch (err) { print("FALLO DE HARDWARE: " + err.message); }
         }
     </script>
 </body>
 </html>
-
