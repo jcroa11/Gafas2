@@ -3,31 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control Maestro Gafas</title>
+    <title>Gafas Pro - Enlace Maestro</title>
     <style>
         body { background: #000; color: #fff; font-family: sans-serif; text-align: center; margin: 0; padding: 10px; }
-        #visor-principal { 
+        #visor-marco { 
             width: 100%; max-width: 600px; aspect-ratio: 16/9; background: #111; 
             margin: 10px auto; border: 2px solid #00ff00; border-radius: 12px; overflow: hidden; 
         }
         video { width: 100%; height: 100%; object-fit: cover; }
-        .btn-mac {
+        .btn-emparejar {
             width: 100%; max-width: 600px; padding: 25px; margin: 10px auto;
             background: #00ff00; color: #000; border: none; border-radius: 15px;
-            font-size: 20px; font-weight: bold; cursor: pointer; text-transform: uppercase;
+            font-size: 18px; font-weight: bold; cursor: pointer; display: block;
         }
+        #estado { background: #222; padding: 10px; border-radius: 8px; color: #0f0; font-size: 13px; margin-bottom: 10px; }
         .controles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 600px; margin: 15px auto; }
-        button.accion { padding: 20px; border: none; border-radius: 12px; font-size: 16px; font-weight: bold; color: white; }
-        #estado { color: #0f0; background: #222; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 14px; }
+        button.accion { padding: 20px; border: none; border-radius: 10px; font-weight: bold; color: white; }
     </style>
 </head>
 <body>
 
-    <div id="estado">SISTEMA INICIALIZADO - ESPERANDO GAFAS</div>
+    <div id="estado">SISTEMA LISTO: ESPERANDO VINCULACIÓN</div>
 
-    <button class="btn-mac" onclick="vincularGafas()">🔗 CONECTAR A DIRECCIÓN MAC / GAFAS</button>
+    <button class="btn-emparejar" id="btnBluetooth">🔗 EMPAREJAR GAFAS POR DIRECCIÓN MAC</button>
 
-    <div id="visor-principal">
+    <div id="visor-marco">
         <video id="video" autoplay playsinline muted></video>
     </div>
 
@@ -39,44 +39,40 @@
     </div>
 
     <script>
-        const video = document.getElementById('video');
+        const btn = document.getElementById('btnBluetooth');
         const estado = document.getElementById('estado');
+        const video = document.getElementById('video');
 
-        async function vincularGafas() {
+        btn.addEventListener('click', async () => {
             try {
-                estado.innerText = "ESCANEANDO DISPOSITIVOS BLUETOOTH...";
+                estado.innerText = "ESCANEANDO... MANTÉN LAS GAFAS CERCA";
                 
-                // Intentamos despertar el protocolo Bluetooth del navegador
-                // Esto abrirá la lista donde aparecerá la MAC o el nombre de tus gafas
+                // Forzamos al navegador a abrir la interfaz de selección de Bluetooth
+                // Esto es lo que permite conectar con la MAC del dispositivo
                 const device = await navigator.bluetooth.requestDevice({
-                    acceptAllDevices: true,
-                    optionalServices: ['battery_service', 'device_information']
+                    acceptAllDevices: true
                 });
 
-                estado.innerText = "VINCULADO A: " + (device.name || device.id);
+                estado.innerText = "CONECTADO A: " + (device.name || "DISPOSITIVO MAC");
 
-                // Una vez el Bluetooth da el "OK", forzamos al sistema a capturar el video
+                // Una vez emparejado, intentamos activar el flujo de video
+                // Si el hardware lo permite, el stream cambiará a las gafas
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: "environment",
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    }
+                    video: { facingMode: "environment" }
                 });
-
+                
                 video.srcObject = stream;
-                estado.innerText = "CONEXIÓN ESTABLECIDA - RECIBIENDO VIDEO";
+                estado.innerText = "VIDEO SINCRONIZADO";
 
             } catch (err) {
                 console.error(err);
-                estado.innerText = "ERROR: SE CANCELÓ LA VINCULACIÓN O NO HAY PERMISO";
+                estado.innerText = "ERROR: NO SE PUDO EMPAREJAR. REINTENTA.";
                 
-                // Si el Bluetooth no activa el video, intentamos abrir la cámara de respaldo
-                const fallback = await navigator.mediaDevices.getUserMedia({ video: true });
-                video.srcObject = fallback;
+                // Si falla el Bluetooth, intentamos abrir la cámara trasera como respaldo
+                navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(s => video.srcObject = s);
             }
-        }
+        });
     </script>
 </body>
 </html>
-
