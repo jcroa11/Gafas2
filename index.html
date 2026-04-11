@@ -6,101 +6,77 @@
     <title>SISTEMA GAFAS LENS</title>
     <style>
         body { background: #000; color: #00ff00; font-family: 'Courier New', monospace; margin: 0; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
-        
-        #pantalla { flex-grow: 1; display: flex; align-items: center; justify-content: center; background: #050505; position: relative; border-bottom: 2px solid #00ff00; }
-        video { width: 100%; height: 100%; object-fit: cover; display: none; }
-        
-        .terminal { position: absolute; top: 10px; left: 10px; font-size: 10px; background: rgba(0,0,0,0.7); padding: 5px; z-index: 10; border-left: 2px solid #00ff00; }
-        
-        .panel-control { background: #111; padding: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        
-        .btn { 
-            padding: 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; 
-            text-transform: uppercase; font-size: 14px; transition: 0.3s;
-        }
-        .btn-connect { background: #00ff00; color: #000; box-shadow: 0 0 15px rgba(0,255,0,0.4); }
-        .btn-cmd { background: #222; color: #00ff00; border: 1px solid #00ff00; }
-        .btn:active { transform: scale(0.95); opacity: 0.8; }
+        #visor { flex-grow: 1; background: #050505; position: relative; border-bottom: 2px solid #00ff00; display: flex; align-items: center; justify-content: center; }
+        video { width: 100%; height: 100%; object-fit: contain; }
+        .terminal { position: absolute; top: 10px; left: 10px; font-size: 10px; background: rgba(0,0,0,0.8); padding: 5px; z-index: 10; border-left: 2px solid #00ff00; }
+        .controles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 20px; background: #111; height: 150px; }
+        .btn { background: #222; border: 1px solid #444; color: #fff; border-radius: 10px; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; text-align: center; }
+        .btn:active { background: #00ff00; color: #000; }
+        #btn-conectar { position: absolute; z-index: 20; padding: 20px; background: #00ff00; color: #000; border: none; font-weight: bold; border-radius: 50px; cursor: pointer; box-shadow: 0 0 20px #00ff00; }
     </style>
 </head>
 <body>
 
-    <div id="pantalla">
-        <div class="terminal" id="log">>> SISTEMA LISTO<br>>> ESPERANDO VINCULACIÓN...</div>
-        <video id="webcam" autoplay playsinline></video>
-        <div id="placeholder">MODO LENS ESPERA</div>
+    <div id="visor">
+        <div class="terminal" id="log">>> SISTEMA: LISTO<br>>> ESPERANDO ENLACE...</div>
+        <button id="btn-conectar" onclick="activarLente()">ACTIVAR LENTE GAFAS</button>
+        <video id="v" autoplay playsinline muted></video>
     </div>
 
-    <div class="panel-control">
-        <button class="btn btn-connect" onclick="vincularGafas()">🔗 CONECTAR GAFAS</button>
-        <button class="btn btn-cmd" onclick="activarTransmision()">▶️ INICIAR LENTE</button>
-        <button class="btn btn-cmd" onclick="tomarFoto()">📸 CAPTURAR</button>
-        <button class="btn btn-cmd" style="color:#ff4444; border-color:#ff4444;" onclick="location.reload()">🔄 RESET</button>
+    <div class="controles">
+        <div class="btn" onclick="alert('Capturando...')">📸<br>FOTO</div>
+        <div class="btn" style="color:red">🔴<br>REC</div>
+        <div class="btn">🔆<br>BRILLO</div>
+        <div class="btn" onclick="location.reload()">🔄<br>RESET</div>
     </div>
 
     <script>
-        let dispositivoGafas;
-        let caracteristicaTx;
+        const video = document.getElementById('v');
         const log = document.getElementById('log');
+        const btn = document.getElementById('btn-conectar');
 
         function imprimir(msg) {
             log.innerHTML += `<br>>> ${msg}`;
             log.scrollTop = log.scrollHeight;
         }
 
-        async function vincularGafas() {
+        async function activarLente() {
             try {
-                imprimir("Buscando periférico Bluetooth...");
+                imprimir("ESCANEANDO HARDWARE...");
                 
-                // Filtramos por servicios comunes de transferencia de datos en gafas inteligentes
-                dispositivoGafas = await navigator.bluetooth.requestDevice({
-                    acceptAllDevices: true,
-                    optionalServices: [
-                        '6e400001-b5a3-f393-e0a9-e50e24dcca9e', // Nordic UART (Muy común)
-                        '00001101-0000-1000-8000-00805f9b34fb'  // SPP Standard
-                    ]
-                });
-
-                imprimir(`CONECTADO A: ${dispositivoGafas.name}`);
-                const server = await dispositivoGafas.gatt.connect();
-                imprimir("Servidor GATT activo.");
+                // Pedir permisos primero
+                await navigator.mediaDevices.getUserMedia({ video: true });
                 
-                // Aquí intentamos activar la cámara del celular como visor secundario
-                activarVisorCelular();
+                // Listar todas las cámaras
+                const dispositivos = await navigator.mediaDevices.enumerateDevices();
+                const camaras = dispositivos.filter(d => d.kind === 'videoinput');
+                
+                imprimir(`DETECTADAS: ${camaras.length} CÁMARAS`);
 
-            } catch (error) {
-                imprimir("ERROR DE CONEXIÓN: " + error);
-            }
-        }
+                // LÓGICA DE SALTO: Si hay más de una, la última suele ser la externa/gafas
+                let seleccionado = camaras[camaras.length - 1].deviceId;
 
-        async function activarVisorCelular() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "environment" } 
-                });
-                const video = document.getElementById('webcam');
+                const config = {
+                    video: {
+                        deviceId: { exact: seleccionado },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                };
+
+                const stream = await navigator.mediaDevices.getUserMedia(config);
                 video.srcObject = stream;
-                video.style.display = "block";
-                document.getElementById('placeholder').style.display = "none";
-                imprimir("VISOR DE APOYO ACTIVADO");
-            } catch (e) {
-                imprimir("VISOR LOCAL NO DISPONIBLE");
-            }
-        }
+                
+                imprimir("ESTADO: TRANSMITIENDO");
+                btn.style.display = 'none'; // Ocultar botón tras conectar
 
-        async function activarTransmision() {
-            if (!dispositivoGafas) {
-                imprimir("ERROR: PRIMERO VINCULA LAS GAFAS");
-                return;
+            } catch (err) {
+                imprimir("ERROR: REINTENTANDO CONEXIÓN GENÉRICA...");
+                // Si falla lo anterior, intenta abrir cualquier cámara trasera
+                const fallback = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                video.srcObject = fallback;
+                btn.style.display = 'none';
             }
-            imprimir("ENVIANDO COMANDO: START_STREAM...");
-            // Nota: Aquí se envía el código HEX que las gafas entienden para prender su cámara
-            // Sin el modelo exacto, mandamos un pulso genérico de activación
-        }
-
-        function tomarFoto() {
-            imprimir("CAPTURANDO IMAGEN...");
-            // Lógica de captura
         }
     </script>
 </body>
