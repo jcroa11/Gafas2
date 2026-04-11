@@ -3,94 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>XKOEN PRO COMMANDER</title>
+    <title>XKOEN TERMINAL PRO</title>
     <style>
-        body { background: #000; color: #00ff00; font-family: 'Courier New', monospace; margin: 0; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
-        #log { font-size: 10px; padding: 10px; height: 100px; background: #050505; border-bottom: 1px solid #00ff00; overflow-y: auto; }
-        #visor-container { flex-grow: 1; position: relative; background: #000; display: flex; align-items: center; justify-content: center; }
-        video { width: 100%; height: 100%; object-fit: contain; background: #000; }
-        .controles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 15px; background: #111; border-top: 1px solid #333; }
-        .btn { background: #222; border: 1px solid #00ff00; color: #00ff00; padding: 18px 0; border-radius: 8px; font-size: 11px; font-weight: bold; text-align: center; cursor: pointer; }
-        .btn:active { background: #00ff00; color: #000; }
-        /* El selector que va a forzar la entrada */
-        #selector-lente { position: absolute; top: 15px; width: 90%; background: #00ff00; color: #000; padding: 15px; border-radius: 5px; font-weight: bold; z-index: 100; border: none; font-size: 14px; }
+        body { background: #000; color: #00ff00; font-family: 'Courier New', monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        #log { flex-grow: 1; padding: 15px; font-size: 11px; overflow-y: auto; background: #050505; border-bottom: 2px solid #00ff00; }
+        .control-panel { padding: 20px; background: #111; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .btn-main { grid-column: span 2; background: #00ff00; color: #000; padding: 20px; font-weight: bold; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+        .btn-sub { background: #222; color: #00ff00; border: 1px solid #00ff00; padding: 15px; font-size: 12px; border-radius: 5px; }
+        #video-container { width: 100%; height: 0; background: #000; transition: height 0.5s; overflow: hidden; }
+        video { width: 100%; height: 100%; object-fit: contain; }
     </style>
 </head>
 <body>
 
-    <div id="log">>> SISTEMA XKOEN: ONLINE<br>>> BUSCANDO HARDWARE EXTERNO...</div>
-
-    <div id="visor-container">
-        <select id="selector-lente" onchange="forzarLente(this.value)">
-            <option value="">-- SELECCIONAR LENTE DE GAFAS --</option>
-        </select>
-        <video id="video-visor" autoplay playsinline muted></video>
+    <div id="log">>> XKOEN_SYSTEM_INIT: READY...<br>>> ESPERANDO VINCULACIÓN CON XKOENPRO_282B...</div>
+    
+    <div id="video-container">
+        <video id="v" autoplay playsinline muted></video>
     </div>
 
-    <div class="controles">
-        <div class="btn" onclick="alert('Captura OK')">📸 FOTO</div>
-        <div class="btn" style="color:#ff4444; border-color:#ff4444;">🔴 REC</div>
-        <div class="btn">🔆 BRILLO</div>
-        <div class="btn" onclick="location.reload()">🔄 RESET</div>
+    <div class="control-panel">
+        <button class="btn-main" onclick="conectarSistema()">🔗 VINCULAR HARDWARE XKOEN</button>
+        <button class="btn-sub" onclick="activarVideo()">▶️ FORZAR VIDEO</button>
+        <button class="btn-sub" onclick="enviarComando('0x01')">⚡ COMANDO START</button>
+        <button class="btn-sub" style="grid-column: span 2; border-color: red; color: red;" onclick="location.reload()">🔄 REINICIAR SISTEMA</button>
     </div>
 
     <script>
-        const v = document.getElementById('video-visor');
-        const l = document.getElementById('log');
-        const s = document.getElementById('selector-lente');
+        const log = document.getElementById('log');
+        const v = document.getElementById('v');
+        const container = document.getElementById('video-container');
 
         function print(msg) {
-            l.innerHTML += `<br>>> ${msg}`;
-            l.scrollTop = l.scrollHeight;
+            log.innerHTML += `<br>>> ${msg}`;
+            log.scrollTop = log.scrollHeight;
         }
 
-        async function cargarDispositivos() {
+        async function conectarSistema() {
             try {
-                // Forzar la solicitud de permisos al inicio
-                await navigator.mediaDevices.getUserMedia({ video: true });
-                const dispositivos = await navigator.mediaDevices.enumerateDevices();
-                const camaras = dispositivos.filter(d => d.kind === 'videoinput');
-
-                print(`DETECTADAS: ${camaras.length} CÁMARAS`);
-
-                camaras.forEach((cam, i) => {
-                    const opt = document.createElement('option');
-                    opt.value = cam.deviceId;
-                    // Buscamos nombres como "USB" o el ID 3
-                    opt.text = cam.label || `Lente Externo ${i + 1}`;
-                    s.appendChild(opt);
+                print("Iniciando escaneo WebBluetooth...");
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ namePrefix: 'XKOEN' }],
+                    optionalServices: [
+                        '00001101-0000-1000-8000-00805f9b34fb', // Serial Port
+                        '6e400001-b5a3-f393-e0a9-e50e24dcca9e'  // UART Nordic
+                    ]
                 });
 
-                print("LISTO. SELECCIONE EL LENTE EN EL MENÚ VERDE.");
+                print("CONECTADO: " + device.name);
+                const server = await device.gatt.connect();
+                print("GATT Server: CONECTADO");
+                
+                // Una vez conectado el Bluetooth, intentamos "pescar" el video
+                activarVideo();
             } catch (err) {
-                print("ERROR: DEBE DAR PERMISOS DE CÁMARA");
+                print("ERROR: " + err.message);
+                if (err.message.includes("User cancelled")) print("VUELVE A INTENTAR Y SELECCIONA LAS GAFAS.");
             }
         }
 
-        async function forzarLente(id) {
-            if (!id) return;
-            print("VINCULANDO LENTE XKOEN...");
-            
-            // Detener transmisiones previas
-            if (window.st) {
-                window.st.getTracks().forEach(t => t.stop());
-            }
-
+        async function activarVideo() {
+            print("Escaneando buses de video externos...");
             try {
-                // Intentamos abrir el lente con la máxima resolución posible
+                // Buscamos específicamente dispositivos que NO sean las cámaras internas
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const camaras = devices.filter(d => d.kind === 'videoinput');
+                
+                // Si hay más de las 3 del teléfono (que ya vimos que son internas)
+                // forzamos la que sobre. Si no, forzamos la última.
+                let targetId = camaras[camaras.length - 1].deviceId;
+
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { deviceId: { exact: id }, width: 1920, height: 1080 }
+                    video: { deviceId: { exact: targetId }, width: 1280, height: 720 }
                 });
-                window.st = stream;
+
+                container.style.height = "50vh";
                 v.srcObject = stream;
-                print("TRANSMISIÓN ESTABLECIDA");
-                s.style.opacity = "0.2"; // Opacar para no tapar la vista
+                print("TRANSMISIÓN DE VIDEO ESTABLECIDA");
             } catch (e) {
-                print("FALLO DE ENLACE: PRUEBE OTRA OPCIÓN");
+                print("ERROR VIDEO: El hardware no entrega flujo UVC.");
+                print("INTENTA: Desconectar y conectar las gafas físicamente.");
             }
         }
 
-        window.onload = cargarDispositivos;
+        async function enviarComando(hex) {
+            print("Enviando pulso de activación " + hex + "...");
+            // Lógica para escribir en la característica Bluetooth
+        }
     </script>
 </body>
 </html>
