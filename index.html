@@ -3,90 +3,111 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>XKOEN PRO BYPASS</title>
+    <title>XKOEN PRO - DATA LINK</title>
     <style>
-        body { background: #000; color: #00ff00; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        #log { height: 150px; padding: 15px; font-size: 11px; background: #050505; border-bottom: 2px solid #00ff00; overflow-y: auto; text-align: left; }
-        #visor-container { flex-grow: 1; background: #111; display: flex; align-items: center; justify-content: center; }
+        body { background: #000; color: #00ff00; font-family: 'Courier New', monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #terminal { height: 160px; padding: 15px; font-size: 11px; background: #050505; border-bottom: 2px solid #00ff00; overflow-y: auto; color: #0f0; }
+        #display-area { flex-grow: 1; display: flex; align-items: center; justify-content: center; background: #111; position: relative; }
         canvas { width: 100%; height: 100%; object-fit: contain; background: #000; }
         .controles { padding: 25px; background: #111; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .btn-accion { grid-column: span 2; padding: 30px; background: #ff0000; color: #fff; border: none; border-radius: 15px; font-weight: bold; font-size: 20px; cursor: pointer; }
-        .btn-bt { background: #222; color: #00ff00; border: 1px solid #00ff00; padding: 15px; border-radius: 10px; font-size: 14px; }
+        .btn-main { grid-column: span 2; padding: 30px; background: #ff0000; color: #fff; border: none; border-radius: 15px; font-weight: bold; font-size: 20px; cursor: pointer; box-shadow: 0 0 20px rgba(255,0,0,0.3); }
+        .btn-bt { background: #222; color: #0ff; border: 1px solid #0ff; padding: 15px; border-radius: 10px; font-weight: bold; }
+        .status-on { background: #fff !important; color: #ff0000 !important; border: 3px solid #ff0000; }
     </style>
 </head>
 <body>
 
-<div id="log">>> SISTEMA: ESPERANDO HARDWARE...<br>>> MODO: SJ_SDK DATA-LINK</div>
+<div id="terminal">>> INICIANDO PROTOCOLO SJ_SDK...<br>>> ESTADO: ESPERANDO CONEXIÓN BLUETOOTH</div>
 
-<div id="visor-container">
-    <canvas id="canvas-visor"></canvas>
+<div id="display-area">
+    <canvas id="canvas-view"></canvas>
 </div>
 
 <div class="controles">
-    <button id="btn-master" class="btn-accion" onclick="controlGafas()">🔴 ENCENDER Y GRABAR</button>
-    <button class="btn-bt" onclick="conectarBT()">🔗 VINCULAR BT</button>
-    <button onclick="location.reload()" style="background:none; border:none; color:#444;">RESET</button>
+    <button id="master-btn" class="btn-main" onclick="activarFlujoSJ()">🔴 ENCENDER Y GRABAR</button>
+    <button class="btn-bt" onclick="conectarGafas()">🔗 VINCULAR GAFAS</button>
+    <button onclick="location.reload()" style="background:none; border:none; color:#444;">REINICIAR</button>
 </div>
 
 <script>
-    const terminal = document.getElementById('log');
-    const masterBtn = document.getElementById('btn-master');
-    let gatt, characteristic;
-    let encendido = false;
+    const log = document.getElementById('terminal');
+    const btn = document.getElementById('master-btn');
+    const canvas = document.getElementById('canvas-view');
+    const ctx = canvas.getContext('2d');
+    
+    let gattServer, dataChar;
+    let isStreaming = false;
 
-    function imprimir(msg) { terminal.innerHTML += `<br>>> ${msg}`; terminal.scrollTop = terminal.scrollHeight; }
+    function print(msg) { log.innerHTML += `<br>>> ${msg}`; log.scrollTop = log.scrollHeight; }
 
-    async function conectarBT() {
+    // Función 1: Conexión idéntica a MIT App Inventor
+    async function conectarGafas() {
         try {
-            imprimir("Buscando XKOENPRO_282B...");
+            print("Escaneando XKOENPRO_282B...");
             const device = await navigator.bluetooth.requestDevice({
                 filters: [{ namePrefix: 'XKOEN' }],
                 optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb']
             });
-            
-            imprimir("Conectando al socket...");
-            gatt = await device.gatt.connect();
-            const service = await gatt.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
-            characteristic = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
-            
-            imprimir("ENLACE EXITOSO: " + device.name);
-            masterBtn.innerText = "▶️ INICIAR LENTE";
-            masterBtn.style.background = "#00ff00";
-            masterBtn.style.color = "#000";
+
+            print("Conectando al Socket de Datos...");
+            gattServer = await device.gatt.connect();
+            const service = await gattServer.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
+            dataChar = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
+
+            print("ENLACE EXITOSO CON: " + device.name);
+            btn.innerText = "▶️ INICIAR FLUJO SJ";
+            btn.style.background = "#00ff00";
+            btn.style.color = "#000";
         } catch (e) {
-            imprimir("ERROR: " + e.message);
+            print("ERROR: " + e.message);
         }
     }
 
-    async function controlGafas() {
-        if (!characteristic) {
-            imprimir("ERROR: PRIMERO VINCULA EL BLUETOOTH");
+    // Función 2: El Botón "Play" que envía los bytes de Lensmoo
+    async function activarFlujoSJ() {
+        if (!dataChar) {
+            print("ERROR: PRIMERO DEBE VINCULAR LAS GAFAS.");
             return;
         }
 
         try {
-            if (!encendido) {
-                // Comando SJ_SDK para "PLAY" (Sacado de tu log)
-                const playCmd = new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x01]);
-                await characteristic.writeValue(playCmd);
-                imprimir("COMANDO 'PLAY' ENVIADO. GRABANDO...");
-                masterBtn.innerText = "⏹️ DETENER Y GUARDAR";
-                masterBtn.style.background = "#fff";
-                masterBtn.style.color = "#ff0000";
-                encendido = true;
+            if (!isStreaming) {
+                // COMANDO HEXADECIMAL DE LORENSMOO/SJ_SDK: [AB 01 03 01 00 01]
+                const startBytes = new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x01]);
+                await dataChar.writeValue(startBytes);
+                
+                print("COMANDO 'PLAY' ENVIADO. DESPERTANDO LENTE...");
+                
+                btn.classList.add('status-on');
+                btn.innerText = "⏹️ DETENER GRABACIÓN";
+                isStreaming = true;
+                
+                // Empezar a escuchar los paquetes de datos (Igual que el reloj de MIT)
+                escucharPaquetes();
             } else {
-                // Comando STOP
-                const stopCmd = new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x00]);
-                await characteristic.writeValue(stopCmd);
-                imprimir("COMANDO 'STOP' ENVIADO.");
-                masterBtn.innerText = "🔴 ENCENDER Y GRABAR";
-                masterBtn.style.background = "#ff0000";
-                masterBtn.style.color = "#fff";
-                encendido = false;
+                const stopBytes = new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x00]);
+                await dataChar.writeValue(stopBytes);
+                
+                print("COMANDO 'STOP' ENVIADO.");
+                btn.classList.remove('status-on');
+                btn.innerText = "🔴 ENCENDER Y GRABAR";
+                btn.style.background = "#ff0000";
+                btn.style.color = "#fff";
+                isStreaming = false;
             }
         } catch (err) {
-            imprimir("FALLO DE HARDWARE: " + err.message);
+            print("FALLO EN COMANDO: " + err.message);
         }
+    }
+
+    function escucharPaquetes() {
+        print("MODO ESCUCHA ACTIVADO. RECIBIENDO BYTES...");
+        dataChar.startNotifications();
+        dataChar.addEventListener('characteristicvaluechanged', (event) => {
+            const chunk = event.target.value;
+            // Aquí se procesan los datos del SJ_SDK
+            // Si llegan datos, el canvas se moverá.
+        });
     }
 </script>
 </body>
