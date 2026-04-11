@@ -3,87 +3,84 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>XKOEN DATA LINK</title>
+    <title>XKOEN PRO BYPASS</title>
     <style>
         body { background: #000; color: #00ff00; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        #terminal { height: 150px; padding: 15px; font-size: 11px; background: #050505; border-bottom: 2px solid #00ff00; overflow-y: auto; text-align: left; }
-        #visor-area { flex-grow: 1; background: #111; display: flex; align-items: center; justify-content: center; }
+        #terminal { height: 160px; padding: 15px; font-size: 11px; background: #050505; border-bottom: 2px solid #00ff00; overflow-y: auto; text-align: left; }
+        #visor { flex-grow: 1; display: flex; align-items: center; justify-content: center; background: #111; }
         canvas { width: 100%; height: 100%; object-fit: contain; background: #000; }
         .controles { padding: 25px; background: #111; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
         .btn-play { grid-column: span 2; padding: 30px; background: #f00; color: #fff; border: none; border-radius: 15px; font-weight: bold; font-size: 20px; cursor: pointer; }
         .btn-bt { background: #222; color: #0f0; border: 1px solid #0f0; padding: 15px; border-radius: 10px; font-weight: bold; }
-        .ready { background: #0f0 !important; color: #000 !important; }
-        .active { background: #fff !important; color: #f00 !important; border: 3px solid #f00; }
+        .online { background: #0f0 !important; color: #000 !important; }
     </style>
 </head>
 <body>
 
-<div id="terminal">>> SISTEMA: LISTO<br>>> MODO: DATA-LINK (BYPASS SAMSUNG)<br>>> PASO 1: VINCULAR GAFAS</div>
+<div id="terminal">>> INICIANDO DATA-LINK...<br>>> PASO 1: VINCULAR BT</div>
 
-<div id="visor-area">
-    <canvas id="canvas-view"></canvas>
-</div>
+<div id="visor"><canvas id="canvas-view"></canvas></div>
 
 <div class="controles">
-    <button id="btn-master" class="btn-play" onclick="controlAccion()">🔴 ENCENDER Y GRABAR</button>
-    <button class="btn-bt" onclick="vincularGafas()">🔗 VINCULAR BT</button>
+    <button id="master-btn" class="btn-play" onclick="controlGafas()">🔴 ENCENDER Y GRABAR</button>
+    <button class="btn-bt" onclick="conectar()">🔗 VINCULAR BT</button>
     <button onclick="location.reload()" style="background:none; border:none; color:#444;">RESET</button>
 </div>
 
 <script>
-    const term = document.getElementById('terminal');
-    const btn = document.getElementById('btn-master');
-    let gatt, char;
-    let isRunning = false;
+    const log = document.getElementById('terminal');
+    const btn = document.getElementById('master-btn');
+    let characteristic;
+    let activo = false;
 
-    function log(msg) { term.innerHTML += `<br>>> ${msg}`; term.scrollTop = term.scrollHeight; }
+    function print(msg) { log.innerHTML += `<br>>> ${msg}`; log.scrollTop = log.scrollHeight; }
 
-    async function vincularGafas() {
+    async function conectar() {
         try {
-            log("Escaneando XKOENPRO_282B...");
+            print("Buscando XKOENPRO...");
+            // Cambiamos la estrategia: Aceptar todos los servicios para que no diga "No services matching"
             const device = await navigator.bluetooth.requestDevice({
                 filters: [{ namePrefix: 'XKOEN' }],
-                optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb']
+                optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb', '00001101-0000-1000-8000-00805f9b34fb']
             });
             
-            log("Conectando al canal de datos...");
-            gatt = await device.gatt.connect();
-            const service = await gatt.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
-            char = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
+            print("Vinculando Socket...");
+            const server = await device.gatt.connect();
             
-            log("CONECTADO CON ÉXITO.");
+            // Intentamos encontrar el servicio ffe0 o el de puerto serie
+            const services = await server.getPrimaryServices();
+            print("Servicios encontrados: " + services.length);
+            
+            const service = services[0]; // Tomamos el primero disponible si el UUID falla
+            const chars = await service.getCharacteristics();
+            characteristic = chars[0];
+            
+            print("CONECTADO A: " + device.name);
             btn.innerText = "▶️ ACTIVAR LENTE";
-            btn.classList.add('ready');
-        } catch (e) { log("ERROR BT: " + e.message); }
+            btn.classList.add('online');
+        } catch (e) {
+            print("ERROR: " + e.message);
+            print("TIP: Desvincula las gafas del Bluetooth del celular y deja que esta página las busque solas.");
+        }
     }
 
-    async function controlAccion() {
-        if (!char) { log("ERROR: VINCULA LAS GAFAS PRIMERO."); return; }
-
+    async function controlGafas() {
+        if (!characteristic) { print("ERROR: VINCULA EL BT"); return; }
         try {
-            if (!isRunning) {
-                // COMANDO HEXADECIMAL DE LENS MOO (SJ_SDK)
+            if (!activo) {
                 const play = new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x01]);
-                await char.writeValue(play);
-                
-                log("COMANDO 'PLAY' ENVIADO. GRABANDO...");
+                await characteristic.writeValue(play);
+                print("PLAY ENVIADO.");
                 btn.innerText = "⏹️ DETENER";
-                btn.classList.remove('ready');
-                btn.classList.add('active');
-                isRunning = true;
-                
-                char.startNotifications();
+                activo = true;
             } else {
                 const stop = new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x00]);
-                await char.writeValue(stop);
-                
-                log("COMANDO 'STOP' ENVIADO.");
-                btn.innerText = "▶️ ACTIVAR LENTE";
-                btn.classList.remove('active');
-                btn.classList.add('ready');
-                isRunning = false;
+                await characteristic.writeValue(stop);
+                print("STOP ENVIADO.");
+                btn.innerText = "🔴 ENCENDER Y GRABAR";
+                activo = false;
             }
-        } catch (err) { log("FALLO: " + err.message); }
+        } catch (err) { print("FALLO: " + err.message); }
     }
 </script>
 </body>
