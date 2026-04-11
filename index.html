@@ -6,109 +6,113 @@
     <title>XKOEN PRO CONTROL</title>
     <style>
         body { background: #000; color: #00ff00; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        #log { font-size: 11px; padding: 15px; height: 120px; background: #050505; border-bottom: 2px solid #00ff00; overflow-y: auto; }
-        #visor-container { flex-grow: 1; display: flex; align-items: center; justify-content: center; background: #000; position: relative; }
-        video { width: 100%; height: 100%; object-fit: contain; }
-        
-        .controles { padding: 20px; background: #111; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .btn-rec { grid-column: span 2; padding: 25px; background: #ff0000; color: #fff; border: none; border-radius: 50px; font-weight: bold; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; }
-        .btn-rec.activo { background: #fff; color: #ff0000; animation: pulse 1.5s infinite; }
-        
+        #log { font-size: 11px; padding: 15px; height: 100px; background: #050505; border-bottom: 2px solid #00ff00; overflow-y: auto; text-align: left; }
+        #visor-box { flex-grow: 1; background: #000; display: flex; align-items: center; justify-content: center; position: relative; }
+        video { width: 100%; height: 100%; object-fit: contain; background: #111; }
+        .grid-cmds { padding: 20px; background: #111; display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
+        .btn-action { 
+            grid-column: span 2; padding: 25px; background: #ff4444; color: #fff; 
+            border: none; border-radius: 50px; font-weight: bold; font-size: 18px; 
+            cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        .btn-action.grabando { background: #fff; color: #ff4444; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
 
-    <div id="log">>> SISTEMA XKOEN LISTO...<br>>> ESTADO: ESPERANDO COMANDO PLAY...</div>
+    <div id="log">>> XKOEN_SYSTEM_INIT: OK<br>>> ESPERANDO VINCULACIÓN CON XKOENPRO_282B...</div>
 
-    <div id="visor-container">
-        <video id="v" autoplay playsinline></video>
+    <div id="visor-box">
+        <video id="v" autoplay playsinline muted></video>
     </div>
 
-    <div class="controles">
-        <button id="main-btn" class="btn-rec" onclick="toggleGrabacion()">
+    <div class="grid-cmds">
+        <button id="main-btn" class="btn-action" onclick="toggleVisorYGrabacion()">
             <span id="icon">🔴</span> <span id="text">INICIAR GAFAS Y GRABAR</span>
         </button>
-        
-        <button onclick="conectarBT()" style="background:#222; color:#00ff00; border:1px solid #00ff00; padding:10px; border-radius:5px;">🔗 VINCULAR BT</button>
-        <button onclick="location.reload()" style="background:#222; color:#555; border:1px solid #444; padding:10px; border-radius:5px;">🔄 RESET</button>
+        <button onclick="conectarGafasBT()" style="background:#222; color:#00ff00; border:1px solid #00ff00; padding:12px; border-radius:5px;">🔗 VINCULAR BT</button>
+        <button onclick="location.reload()" style="background:#222; color:#555; border:1px solid #444; padding:12px; border-radius:5px;">🔄 RESET</button>
     </div>
 
     <script>
-        let grabacionActiva = false;
-        let mediaRecorder;
-        let chunks = [];
-        const btn = document.getElementById('main-btn');
         const log = document.getElementById('log');
+        const v = document.getElementById('v');
+        const btn = document.getElementById('main-btn');
+        let streamGrabacion;
+        let recorder;
+        let trozos = [];
+        let estadoGrabando = false;
 
         function imprimir(msg) { log.innerHTML += `<br>>> ${msg}`; log.scrollTop = log.scrollHeight; }
 
-        async function conectarBT() {
+        async function conectarGafasBT() {
             try {
-                imprimir("Buscando XKOENPRO_282B...");
+                imprimir("Buscando señal Bluetooth de XKOENPRO...");
                 const device = await navigator.bluetooth.requestDevice({
-                    filters: [{ namePrefix: 'XKOEN' }],
-                    optionalServices: ['00001101-0000-1000-8000-00805f9b34fb']
+                    filters: [{ namePrefix: 'XKOEN' }]
                 });
                 await device.gatt.connect();
-                imprimir("CONECTADO: HARDWARE LISTO PARA RECIBIR 'PLAY'");
+                imprimir("CONECTADO A: " + device.name);
+                imprimir("VISOR LISTO PARA 'PLAY'.");
             } catch (e) { imprimir("ERROR BT: " + e.message); }
         }
 
-        async function toggleGrabacion() {
-            if (!grabacionActiva) {
-                await iniciarGafas();
+        async function toggleVisorYGrabacion() {
+            if (!estadoGrabando) {
+                await encenderVisorYREC();
             } else {
-                detenerGafas();
+                apagarVisorYREC();
             }
         }
 
-        async function iniciarGafas() {
-            imprimir("ENVIANDO COMANDO 'PLAY' A LAS GAFAS...");
+        async function encenderVisorYREC() {
+            imprimir("FORZANDO CAPTURA DE LENTE EXTERNO ('PLAY')...");
             try {
-                // Forzamos la captura del stream (Aquí es donde la gafa debe entregar el video)
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: 1280, height: 720, facingMode: "environment" }
+                // TÉCNICA DE FORZADO: Pedimos alta resolución para saltar la cámara del celular.
+                streamGrabacion = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 1920, height: 1080, facingMode: "environment" }
                 });
-                
-                document.getElementById('v').srcObject = stream;
-                
-                // Iniciamos la grabación interna
-                mediaRecorder = new MediaRecorder(stream);
-                mediaRecorder.ondataavailable = e => chunks.push(e.data);
-                mediaRecorder.onstop = guardarVideo;
-                mediaRecorder.start();
+                v.srcObject = streamGrabacion;
 
-                grabacionActiva = true;
-                btn.classList.add('activo');
+                // Iniciamos la grabación interna del flujo
+                recorder = new MediaRecorder(streamGrabacion);
+                recorder.ondataavailable = e => trozos.push(e.data);
+                recorder.onstop = procesarVideoGuardado;
+                recorder.start();
+
+                estadoGrabando = true;
+                btn.classList.add('grabando');
                 document.getElementById('text').innerText = "DETENER Y GUARDAR";
                 document.getElementById('icon').innerText = "⏹️";
                 imprimir("GRABANDO TRANSMISIÓN...");
-            } catch (err) {
-                imprimir("FALLO AL ACTIVAR LENTE: " + err.message);
-            }
+            } catch (err) { imprimir("FALLO DE ENLACE: " + err.message); }
         }
 
-        function detenerGafas() {
+        function apagarVisorYREC() {
             imprimir("ENVIANDO COMANDO 'STOP'...");
-            mediaRecorder.stop();
-            document.getElementById('v').srcObject.getTracks().forEach(t => t.stop());
-            
-            grabacionActiva = false;
-            btn.classList.remove('activo');
+            if (recorder && recorder.state !== 'inactive') {
+                recorder.stop();
+            }
+            if (streamGrabacion) {
+                streamGrabacion.getTracks().forEach(track => track.stop());
+            }
+            estadoGrabando = false;
+            btn.classList.remove('grabando');
             document.getElementById('text').innerText = "INICIAR GAFAS Y GRABAR";
             document.getElementById('icon').innerText = "🔴";
         }
 
-        function guardarVideo() {
-            const blob = new Blob(chunks, { type: 'video/mp4' });
+        function procesarVideoGuardado() {
+            imprimir("PROCESANDO ARCHIVO...");
+            const blob = new Blob(trozos, { type: 'video/mp4' });
             const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `XKOEN_REC_${Date.now()}.mp4`;
-            a.click();
-            chunks = [];
-            imprimir("ARCHIVO GUARDADO EN DESCARGAS.");
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `XKOEN_REC_${Date.now()}.mp4`;
+            link.click();
+            trozos = [];
+            imprimir("VIDEO GUARDADO EN DESCARGAS.");
         }
     </script>
 </body>
