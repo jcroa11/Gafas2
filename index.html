@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>XKOEN PRO BYPASS</title>
+    <title>XKOEN PRO - BYPASS MAC</title>
     <style>
         body { background: #000; color: #00ff00; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        #terminal { height: 160px; padding: 15px; font-size: 11px; background: #050505; border-bottom: 2px solid #00ff00; overflow-y: auto; text-align: left; }
+        #terminal { height: 180px; padding: 15px; font-size: 11px; background: #050505; border-bottom: 2px solid #00ff00; overflow-y: auto; text-align: left; }
         #visor { flex-grow: 1; display: flex; align-items: center; justify-content: center; background: #111; }
         canvas { width: 100%; height: 100%; object-fit: contain; background: #000; }
         .controles { padding: 25px; background: #111; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
@@ -17,50 +17,62 @@
 </head>
 <body>
 
-<div id="terminal">>> INICIANDO DATA-LINK...<br>>> PASO 1: VINCULAR BT</div>
+<div id="terminal">>> SISTEMA: DATA-LINK ACTIVO<br>>> DESTINO: FA:00:11:13:28:2B<br>>> PASO 1: VINCULAR GAFAS</div>
 
 <div id="visor"><canvas id="canvas-view"></canvas></div>
 
 <div class="controles">
     <button id="master-btn" class="btn-play" onclick="controlGafas()">🔴 ENCENDER Y GRABAR</button>
-    <button class="btn-bt" onclick="conectar()">🔗 VINCULAR BT</button>
+    <button class="btn-bt" onclick="conectarMAC()">🔗 VINCULAR BT</button>
     <button onclick="location.reload()" style="background:none; border:none; color:#444;">RESET</button>
 </div>
 
 <script>
     const log = document.getElementById('terminal');
     const btn = document.getElementById('master-btn');
+    const TARGET_MAC = "fa:00:11:13:28:2b"; // Tu dirección MAC detectada
     let characteristic;
     let activo = false;
 
     function print(msg) { log.innerHTML += `<br>>> ${msg}`; log.scrollTop = log.scrollHeight; }
 
-    async function conectar() {
+    async function conectarMAC() {
         try {
-            print("Buscando XKOENPRO...");
-            // Cambiamos la estrategia: Aceptar todos los servicios para que no diga "No services matching"
+            print("Apuntando a MAC: " + TARGET_MAC);
+            // Escaneo total para saltar el error de UUID
             const device = await navigator.bluetooth.requestDevice({
                 filters: [{ namePrefix: 'XKOEN' }],
-                optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb', '00001101-0000-1000-8000-00805f9b34fb']
+                optionalServices: [
+                    '0000ffe0-0000-1000-8000-00805f9b34fb', 
+                    '00001101-0000-1000-8000-00805f9b34fb',
+                    0xFFE0, 0xFFE1
+                ]
             });
-            
-            print("Vinculando Socket...");
+
+            print("Conectando al Socket...");
             const server = await device.gatt.connect();
             
-            // Intentamos encontrar el servicio ffe0 o el de puerto serie
+            print("Explorando canales de datos...");
             const services = await server.getPrimaryServices();
-            print("Servicios encontrados: " + services.length);
             
-            const service = services[0]; // Tomamos el primero disponible si el UUID falla
-            const chars = await service.getCharacteristics();
-            characteristic = chars[0];
-            
-            print("CONECTADO A: " + device.name);
+            for (let s of services) {
+                const chars = await s.getCharacteristics();
+                if (chars.length > 0) {
+                    characteristic = chars.find(c => c.properties.write || c.properties.writeWithoutResponse);
+                    if (characteristic) {
+                        print("¡Canal de datos abierto en: " + s.uuid + "!");
+                        break;
+                    }
+                }
+            }
+
+            if (!characteristic) throw new Error("Gafas protegidas. No se halló canal de escritura.");
+
+            print("SISTEMA VINCULADO CON ÉXITO.");
             btn.innerText = "▶️ ACTIVAR LENTE";
             btn.classList.add('online');
         } catch (e) {
             print("ERROR: " + e.message);
-            print("TIP: Desvincula las gafas del Bluetooth del celular y deja que esta página las busque solas.");
         }
     }
 
@@ -68,9 +80,10 @@
         if (!characteristic) { print("ERROR: VINCULA EL BT"); return; }
         try {
             if (!activo) {
+                // Comando Lensmoo/SJ_SDK detectado
                 const play = new Uint8Array([0xAB, 0x01, 0x03, 0x01, 0x00, 0x01]);
                 await characteristic.writeValue(play);
-                print("PLAY ENVIADO.");
+                print("PLAY ENVIADO A " + TARGET_MAC);
                 btn.innerText = "⏹️ DETENER";
                 activo = true;
             } else {
